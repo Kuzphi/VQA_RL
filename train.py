@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.autograd import Variable
-from data import Get_Data
+from Misc import Get_Data, batch_generator
 from Model import ValueNN, Classfier, MonteCarloTree
 def Arguement():
 	parser = argparse.ArgumentParser()
@@ -16,6 +16,7 @@ def Arguement():
 	parser.add_argument('--input_ques_h5', type=str, default='./data_prepro_0417_v1.h5',
 						help='path of question data')
 	# Training parameter
+	parser.add_argument('--batch_size', type=int, default=18,help='batch_size for each iterations (default: 18)')
 	parser.add_argument('--word_dim', type=int, default=300,help='word feature size (default: 300)')
 	parser.add_argument('--image_dim', type=int, default=2048,help='image feature size (default: 2048)')
 	parser.add_argument('--num_output', type=int, default=2, help='num of output dimension (default: 2)')
@@ -26,21 +27,25 @@ def Arguement():
 	parser.add_argument('--Classfier_AnsTrans_dim', type=int, default=4096, help='RNN_hidden_size (default: 512)')
 	parser.add_argument('--Classfier_WordTrans_dim', type=int, default=4096, help='RNN_hidden_size (default: 512)')
 	
-
 	#Misc
 	parser.add_argument('--max_words_q', type=int, default=26, help='maximum words for a sentence(default: 26)')
 	parser.add_argument('--max_itr', type=int, default=1000, help='maximum iteration(default: 1000)')
 	parser.add_argument('--epoches', type=int, default=300, help='epoches(default: 300)')
-	parser.add_argument('--seed', type=int, default=1, help='random seed (default: 1)')
+	parser.add_argument('--seed', type=int, default=320, help='random seed (default: 320)')
 	#GPU
 	parser.add_argument('--cuda', action='store_true', default=True,help='enable CUDA training')
 	return vars(parser.parse_args())
-def Train_Classifier():
+
+def Train_Classifier(Classfier, ValueNN, img, data):
+	for img, ques, ans, len_a in batch_generator(img, data, args['batch_size']):
+
+
 
 def Train_ValueNN():
 
-def Generate_ValueNN_train_date():
-	
+def Generate_ValueNN_train_date(Img, Data, Classfier):
+
+
 def Valid():
 
 def Train(**kwargs):

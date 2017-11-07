@@ -22,18 +22,23 @@ class Classfier(nn.model):
 
 	def __init__(self, **kwargs):
 		super(Classfier, self).__init()__
-		self.WordTrans   = Linear(word_dim,  Classfier_QuesTrans_dim)
-		self.ImgTrans    = Linear(image_dim, Classfier_ImgTrans_dim)
-		self.AnsTrans    = Linear(image_dim, Classfier_AnsTrans_dim)
-		self.Classify    = Linear(Classfier_AnsTrans_dim, 2)
-		
-		self.input_size  = RNN_input_size
-		self.hidden_size = RNN_hidden_size
+		self.WordTrans    = Linear(word_dim,  Classfier_QuesTrans_dim)
+		self.ImgTrans     = Linear(image_dim, Classfier_ImgTrans_dim)
+		self.AnsTrans     = Linear(image_dim, Classfier_AnsTrans_dim)
+		self.Classify     = Linear(Classfier_AnsTrans_dim, 2)
+		self.input_size   = RNN_input_size
+		self.hidden_size  = RNN_hidden_size
+		self.Embed_lookup = Embedding(len(Embed_matrix), 300)
+		self.Embed_lookup.weight.data.copy_(Embed_matrix)
+		self.Embed_lookup.weight.requires_grad = False
 		self.Cell = nn.GRUCell(input_size = RNN_input_size, hidden_size = RNN_hidden_size)
 
-	def forward(self, Ques, Ans, ValueNN, Img):
+	def forward(self, Ques, Ans, ValueNN, Embed_matrix, Img):
 		length = Ques.size()[0]
-		hidden_state = [np.zeros()]
+		hidden_state = [np.zeros(Ques,shape[0], self.hidden_size)]
+		ques = self.Embed_lookup(Ques)
+		ans = self.Embed_lookup(ans)
+		ans = ans.mean(ans, dim = 1) 
 		for word in Ques:
 			choice = []
 			for region in xrange(49):
@@ -46,11 +51,11 @@ class Classfier(nn.model):
 			QI = torch.mul(word_ , img_)
 			state = self.Cell(QI, hidden_state[-1])
 			hidden_state.appned(state)
-			return inference(Ans, hidden_state)
+		return inference(ans, hidden_state), hidden_state
 
 	def Inference(Ans, hidden_state):
-		Ans_ = self.AnsTrans(Ans)
-		QIA = torch.mul(hidden_state[-1], Ans_)
+		ans_ = self.AnsTrans(ans)
+		QIA = torch.mul(hidden_state[-1], ans_)
 		confidence = F.Softmax(self.Classify(QIA), axis = 1)
 		return confidence
 

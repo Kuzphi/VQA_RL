@@ -1,5 +1,6 @@
 import numpy as np
 from numpy import array
+import pickle
 def right_align(seq, lengths):
 	v = np.zeros(np.shape(seq))
 	N = np.shape(seq)[1]
@@ -80,7 +81,9 @@ def batch_generator(img, data, batch_size):
 
 		target = np.array(current_target);
 		img = img_feature_train[img_list,:]
-		yield img, question, answer, length_a
+		yield batch_index, img, question, answer, length_a, target
  
-
-
+def load_ValueNN_data(itr):
+	with open (str(itr) + ' record of root. txt', 'rb') as f:
+    	record = pickle.load(f)
+    	

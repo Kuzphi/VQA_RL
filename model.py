@@ -1,63 +1,61 @@
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
-from torch import from_numpy
+from torch import from_numpy, arange, tensor
 from torch.autograd import Variable
 from torch.nn import Module, Linear, GRUCell, Embedding
 from random import uniform, randint
-from numpy import zeros, array, arange
 class ValueNN_Module(Module):
 	def __init__(self, **args):
 		super(ValueNN_Module, self).__init__()
-		self.RNN2Value  = Linear(args['RNN_emb_dim'], args['ValueNN_RNN2Value_dim'])
-		self.Img2Value  = Linear(args['image_dim'], args['ValueNN_Img2Value_dim'])
-		self.Regression = Linear(args['ValueNN_RNN2Value_dim'] + args['ValueNN_Img2Value_dim'], 1)
+		self.RNN2Value  = Linear(args['RNN_emb_dim'], args['ValueNN_RNN2Value_dim']).double()
+		self.Img2Value  = Linear(args['image_dim'], args['ValueNN_Img2Value_dim']).double()
+		self.Regression = Linear(args['ValueNN_RNN2Value_dim'] + args['ValueNN_Img2Value_dim'], 1).double()
 	def forward(self, rnn_emb, Img):
-		print rnn_emb.dtype
-		print Img.dtype
 		RValue = self.RNN2Value(rnn_emb)
 		IValue = self.Img2Value(Img)
-		return self.Regression(torch.concat((RValue,IValue),0))
-
+		return self.Regression(torch.cat((RValue,IValue), dim = 1))
 
 class Classifier_Module(Module):
 	def __init__(self, Embed_matrix, **args):
 		super(Classifier_Module, self).__init__()
-		self.WordTrans    = Linear(args['word_dim'],  args['Classifier_QuesTrans_dim'])
-		self.ImgTrans     = Linear(args['image_dim'], args['Classifier_ImgTrans_dim'])
-		self.AnsTrans     = Linear(args['image_dim'], args['Classifier_AnsTrans_dim'])
-		self.Classify     = Linear(args['Classifier_AnsTrans_dim'], args['classify_dim'])
-		self.input_dim   = args['RNN_input_dim']
-		self.emb_dim  = args['RNN_emb_dim']
-		self.Embed_lookup = Embedding(*Embed_matrix.shape)
-		self.Embed_lookup.weight.data.copy_(from_numpy(Embed_matrix))
+		self.WordTrans    = Linear(args['word_dim'],  args['Classifier_Trans_dim']).double()
+		self.ImgTrans     = Linear(args['image_dim'], args['Classifier_Trans_dim']).double()
+		self.AnsTrans     = Linear(args['word_dim'],  args['RNN_output_dim']).double()
+		self.Classify     = Linear(args['RNN_output_dim'], args['classify_dim']).double()
+		self.input_dim    = args['RNN_input_dim']
+		self.emb_dim      = args['RNN_emb_dim']
+		self.Embed_lookup = Embedding(*Embed_matrix.shape).double()
+		self.Embed_lookup.weight.data.copy_(from_numpy(Embed_matrix).double())
 		self.Embed_lookup.weight.requires_grad = False
-		self.Cell = GRUCell(input_size = args['RNN_input_dim'], hidden_size = args['RNN_emb_dim'])
+		self.Cell = GRUCell(input_size = args['Classifier_Trans_dim'], hidden_size = args['RNN_emb_dim']).double()
 
 	def forward(self, ValueNN, Img, Ques, Ans):
-		Init_state = zeros((Ques.shape[0], self.emb_dim))
+		bs, length = Ques.data.size()
+		Init_state = Variable(torch.zeros((bs, self.emb_dim)).double())
 		hidden_state = [Init_state]
-		ques = self.Embed_lookup(from_numpy(Ques))
-		ans = self.Embed_lookup(from_numpy(Ans))
+		ques = self.Embed_lookup(Ques)
+		ans = self.Embed_lookup(Ans)
 		ans = ans.mean(dim = 1) 
-		for word in Ques:
-			choice = []
+		for step in xrange(length):
+			choice = torch.zeros(4, 49).double()
 			for region in xrange(49):
-				confidence = ValueNN.forward(hidden_state[-1], Img[:,region,:])
-				choice.append(confidence)
-			choice = array(Choice).argmax(axis = 1)
-			select_img = img[arange(length), choice, :]
-			word_ = self.WordTrans(word)
+				confidence = ValueNN.forward(Variable(hidden_state[-1].data, requires_grad = False), Img[:,region,:]).data
+				choice[:, region] = confidence.view(-1)
+			_, choice = choice.max(dim = 1)
+			select_img = Img[torch.arange(0, bs).long(), choice.long(), :]
+			word_ = self.WordTrans(ques[:,step,:])
 			img_  = self.ImgTrans(select_img)
 			QI = torch.mul(word_ , img_)
 			state = self.Cell(QI, hidden_state[-1])
-			hidden_state.appned(state)
-		return self.inference(ans, hidden_state), hidden_state
+			hidden_state.append(state)
+		return self.Inference(ans, hidden_state), hidden_state
 
 	def Inference(self, Ans, hidden_state):
-		ans_ = self.AnsTrans(ans)
+		ans_ = self.AnsTrans(Ans)
+		# print hidden_state[-1], ans_
 		QIA = torch.mul(hidden_state[-1], ans_)
-		confidence = F.Softmax(self.Classify(QIA), axis = 1)
+		confidence = F.softmax(self.Classify(QIA), dim = 1)
 		return confidence
 
 class MonteCarloTree_Module():

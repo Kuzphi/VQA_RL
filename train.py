@@ -2,11 +2,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.optim as optim
+from torch import from_numpy, optim
 from torch.autograd import Variable
-import torch.optim as optim
 import pickle
 import argparse
+
 from os import path
 from copy import copy
 from numpy import array, zeros
@@ -29,12 +29,14 @@ def Arguement():
 	# parser.add_argument('--decay_factor',    type=float, default=0.99997592083, help='decay factor of learning rate')
 	
 	parser.add_argument('--RNN_input_dim',  type=int,   default=300,  help='RNN_input_size (default: 300)')
+	parser.add_argument('--RNN_output_dim',  type=int,   default=512,  help='RNN_input_size (default: 300)')
 	parser.add_argument('--RNN_emb_dim', type=int,   default=512,  help='RNN_hidden_size (default: 512)')	
 	parser.add_argument('--Classifier_lr', type=float, default=1e-5,help='Classifier Learning Rate (default: 1e-5)')
 	parser.add_argument('--Classifier_bs', type=int, default=18,help='batch_size for each Classifier iterations (default: 18)')
-	parser.add_argument('--Classifier_ImgTrans_dim', type=int,  default=4096, help='default: 4096')
-	parser.add_argument('--Classifier_AnsTrans_dim', type=int,  default=4096, help='default: 4096')
-	parser.add_argument('--Classifier_QuesTrans_dim', type=int, default=4096, help='default: 4096')
+	parser.add_argument('--Classifier_Trans_dim', type=int,  default=4096, help='default: 4096')
+	# parser.add_argument('--Classifier_ImgTrans_dim', type=int,  default=4096, help='default: 4096')
+	# parser.add_argument('--Classifier_AnsTrans_dim', type=int,  default=4096, help='default: 4096')
+	# parser.add_argument('--Classifier_QuesTrans_dim', type=int, default=4096, help='default: 4096')
 	parser.add_argument('--Classifier_itr', type=int, default=18,help='Classifier Iteration (default: 18)')
 	
 	parser.add_argument('--ValueNN_RNN2Value_dim', type=int, default=500, help='ValueNN Embedding trans dimension  (default: 500)')
@@ -62,7 +64,7 @@ def Generate_MoteCarloTree_Root(Classifier, ValueNN, Imgs, Data, itr, **kwargs):
 	record = []
 	cnt = 0
 	for index, img, ques, ans, len_a, targets in Classifier_batch_generator(Imgs, Data, 1):
-		_, states = Classifier.forward(ValueNN, img, ques, ans)
+		_, states = Classifier.forward(ValueNN, Variable(from_numpy(img)), Variable(from_numpy(ques)), Variable(from_numpy(ans)))
 		step = np.random.randint(0,26)
 		record.append([index, states[:,step,:], targets])
 		cnt += 1
@@ -84,8 +86,8 @@ def Train_ValueNN(ValueNN, img, global_itr, ValueNN_bs, ValueNNDataPath, **kwarg
 
 	for itr in xrange(ValueNN_itr):
 		for img, state, target in ValueNN_batch_generator(imgs, states, targets, ValueNN_bs):
-			RNN_emb = array([copy(state) for i in xrange(len(target))])
-			value = ValueNN.forward(RNN_emb, img)
+			RNN_emb = array([state for i in xrange(len(target))])
+			value = ValueNN.forward(Variable(from_numpy(RNN_emb)), Variable(from_numpy(img)))
 			loss = F.mseloss(value, target)
 			loss.backward()
 			optimizer.step()
@@ -97,7 +99,7 @@ def Train_Classifier(Classifier, ValueNN, imgs, data, Classifier_bs, **kwargs):
 	optimizer = optimer.adam(Classifier.parameter(), lr =lr)
 	for itr in xrange(Classifier_itr):
 		for _, img, ques, ans, len_a, target in Classifier_batch_generator(imgs, data, Classifier_bs):
-			confidence, _ = Classifier.forward(ques, ans, ValueNN, img)
+			confidence, _ = Classifier.forward(ValueNN, Variable(from_numpy(img)), Variable(from_numpy(ques)), Variable(from_numpy(ans)))
 			loss = F.binary_cross_entropy(confidence, target)
 			loss.backward()
 			optimizer.step()
@@ -107,7 +109,7 @@ def Train_Classifier(Classifier, ValueNN, imgs, data, Classifier_bs, **kwargs):
 def Valid(Classifier, ValueNN, Img, test_data, Classifier_bs, **kwargs):
 	record = zeros(len(test_data), 2)
 	for index, img, ques, ans, len_a, targets in Classifier_batch_generator(Imgs, data, Classifier_bs):
-		confidences, _ = Classifier.forward(ques, ans, ValueNN, img)
+		confidences, _ = Classifier.forward(ValueNN, from_numpy(img), from_numpy(ques), from_numpy(ans))
 		for id, confidence, target in zip(index, confidences, targets):
 			if confidence > record[id / 4]:
 				record[id / 4][0] = confidence

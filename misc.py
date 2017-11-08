@@ -52,10 +52,16 @@ def Load_data(img_h5, ques_h5, data_type, testing = 1):
 		data['ques_pos'] = np.array(hf.get('pos' + data_type +'_ques')) - 1
 		data['ans_pos']  = np.array(hf.get('pos' + data_type +'_ans'))  - 1
 	print('question & answer aligning')
-	data['question'] = right_align(data['question'], data['length_q'])
-	data['answer']   = right_align(data['answer'],   data['length_a'])
-	data['ques_pos'] = right_align(data['ques_pos'], data['length_q'])
-	data['ans_pos']  = right_align(data['ans_pos'],  data['length_a'])
+	if testing:
+		data['question'] = right_align(data['question'][:100], data['length_q'][:100])
+		data['answer']   = right_align(data['answer'][:100],   data['length_a'][:100])
+		data['ques_pos'] = right_align(data['ques_pos'][:100], data['length_q'][:100])
+		data['ans_pos']  = right_align(data['ans_pos'][:100],  data['length_a'][:100])
+	else:
+		data['question'] = right_align(data['question'], data['length_q'])
+		data['answer']   = right_align(data['answer'],   data['length_a'])
+		data['ques_pos'] = right_align(data['ques_pos'], data['length_q'])
+		data['ans_pos']  = right_align(data['ans_pos'],  data['length_a'])
 	return img_feature, data
 
 def Get_Data(ques_h5, train_img_h5, test_img_h5, **kwargs):

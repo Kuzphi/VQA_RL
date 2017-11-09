@@ -1,6 +1,7 @@
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
+import numpy as np
 from torch import from_numpy, arange, tensor
 from torch.autograd import Variable
 from torch.nn import Module, Linear, GRUCell, Embedding
@@ -53,30 +54,29 @@ class Classifier_Module(Module):
 
 	def Inference(self, Ans, hidden_state):
 		ans_ = self.AnsTrans(Ans)
-		# print hidden_state[-1], ans_
 		QIA = torch.mul(hidden_state[-1], ans_)
 		confidence = F.softmax(self.Classify(QIA), dim = 1)
 		return confidence
 
+class Node():
+	def __init__(self, state):
+		self.state = state
+		self.Q = self.P = 0
+		self.s = [None] * 49
+		self.cnt = np.array([1.] * 49)
+		self.win = np.array([0.] * 49)
+	def Score():
+		# Upper Confidence Bound
+		t = self.cnt.sum()
+		score = self.win / self.cnt + sqrt( 2 * log(t) / self.cnt)
+		return score
+
 class MonteCarloTree_Module():
-	class Node():
-		def __init__(self, state):
-			self.state = state
-			self.Q = self.P = 0
-			self.s = [None] * 49
-			self.cnt = np.array([1.] * 49)
-			self.win = np.array([0.] * 49)
-		def Score():
-			# Upper Confidence Bound
-			t = self.cnt.sum()
-			score = self.win / self.cnt + sqrt( 2 * log(t) / self.cnt)
-			return score
-
-
-	def __init__(self, state, Ques, Ans, Img, Traget, Classifier):
+	def __init__(self, Classifier, state, Ques, Ans, Img, Target):
 		self.root = Node(state)
 		self.words = Ques
-		self.Ans = Classifier.Embed_lookup(Ans).mean(dim = 1)
+		print Ans.shape
+		self.Ans = Classifier.Embed_lookup(Variable(from_numpy(Ans).long())).mean(dim = 2)
 		self.Img = Img
 		self.Target = Target
 		self.Classifier = Classifier
@@ -102,5 +102,5 @@ class MonteCarloTree_Module():
 
 	def Generate(self, Roll_Out_size):
 		for num in xrange(Roll_Out_size):
-			self.Sample(Img, Target, ValueNN, 0.2)
-		return F.Softmax(self.root.Score(), axis = 1)
+			self.Sample(0.2)
+		return F.Softmax(self.root.win / self.root.cnt.sum(), dim = 1)

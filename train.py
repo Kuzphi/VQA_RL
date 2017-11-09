@@ -46,7 +46,7 @@ def Arguement():
 	parser.add_argument('--ValueNN_bs', type=int, default=18,help='batch_size for each ValueNN iterations (default: 18)')
 
 	parser.add_argument('--MC_RollOut_Size', type=int, default=3000, help='default: 4096')
-	parser.add_argument('--MC_Root_size', type=int, default=1000,help='1000')
+	parser.add_argument('--MC_Root_size', type=int, default=1,help='default: 1000')
 
 
 
@@ -60,22 +60,23 @@ def Arguement():
 	parser.add_argument('--cuda', action='store_true', default=True,help='enable CUDA training')
 	return vars(parser.parse_args())
 
-def Generate_MoteCarloTree_Root(Classifier, ValueNN, Imgs, Data, itr, **kwargs):
+def Generate_MoteCarloTree_Root(Classifier, ValueNN, Imgs, Data, itr, MC_Root_size, **kwargs):
+	print "Generating MonteCarloTree Root"
 	record = []
 	cnt = 0
 	for index, img, ques, ans, len_a, targets in Classifier_batch_generator(Imgs, Data, 1):
 		_, states = Classifier.forward(ValueNN, Variable(from_numpy(img)), Variable(from_numpy(ques)), Variable(from_numpy(ans)))
-		step = np.random.randint(0,26)
-		record.append([index, states[:,step,:], targets])
+		record.append([index, states[np.random.randint(0,26)], targets])
 		cnt += 1
-		if cnt > Root_size: break;
+		if cnt == MC_Root_size: break;
 	return record
 
 def Generate_ValueNN_train_data(Classifier, records, Img, Data, Itr, **kwargs):
+	print "Generating ValueNN Train Date"
 	Record = []
-	for index, id, state, targets in records:
+	for index, state, targets in records:
 		xid = np.random.randint(0,state.shape[0])
-		Tree = MonteCarloTree_Module(state[xid], Data['Question'], Data['Answer'], Img[index], targets, Classifier)
+		Tree = MonteCarloTree_Module(Classifier, state[xid], Data['question'], Data['answer'], Img[index], targets)
 		value = Tree.Generate(1000)
 		Record.append([state[xid], value, index])
 	Pickle.dump(Record, open(path.join(ValueNNDataPath,"ValueNN Train " + str(Itr)), 'w'))

@@ -3,6 +3,7 @@ from numpy import array
 import h5py
 import pickle
 import itertools
+from os import path
 def right_align(seq, lengths):
 	v = np.zeros(np.shape(seq), dtype = np.int64)
 	N = np.shape(seq)[1]
@@ -100,19 +101,21 @@ def Classifier_batch_generator(Imgs, data, batch_size):
 		yield batch_index, img, question, answer, length_a, target
 
 def ValueNN_batch_generator(img, state, targets, batch_size):
-	idx = np.random.shuffle(np.arange(img.shape[0]))
+	idx = np.arange(img.shape[0])
+	np.random.shuffle(idx)
+	i = 0
 	while i < img.shape[0]:
 		index = idx[i:i + batch_size]
 		yield img[index], state[index], targets[index]
 
-def load_ValueNN_data(global_img, Path, itr):
-	with open(path.join(ValueNNDataPath,"ValueNN Train " + str(itr)), 'rb') as file:
+def load_ValueNN_data(global_img, ValueNNDataPath, itr):
+	with open(path.join(ValueNNDataPath,"ValueNN_Train_" + str(itr)), 'rb') as file:
 		record = pickle.load(file)
-	img, states, target = [], [], []
+	imgs, states, targets = [], [], []
 	for index, state, target in record:
 		states = states + [state] * 49
-		targets = targets + target
-		img = img + list(global_img[index])
-	return array(img), array(states), array(targets)
+		targets = targets + list(target)
+		imgs = imgs + list(global_img[index,:,:])
+	return array(imgs), array(states), array(targets)
 
 

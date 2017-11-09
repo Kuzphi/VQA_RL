@@ -10,7 +10,7 @@ import argparse
 from os import path
 from copy import copy
 from numpy import array, zeros
-from misc import Get_Data, Classifier_batch_generator, ValueNN_batch_generator
+from misc import Get_Data, Classifier_batch_generator, ValueNN_batch_generator, load_ValueNN_data
 from model import ValueNN_Module, Classifier_Module, MonteCarloTree_Module
 def Arguement():
 	parser = argparse.ArgumentParser()
@@ -42,7 +42,7 @@ def Arguement():
 	parser.add_argument('--ValueNN_RNN2Value_dim', type=int, default=500, help='ValueNN Embedding trans dimension  (default: 500)')
 	parser.add_argument('--ValueNN_Img2Value_dim', type=int, default=500, help='ValueNN Images trans dimension (default: 500)')
 	parser.add_argument('--ValueNN_itr', type=int, default=10, help='ValueNN training maximum Iteration  (default: 10)')
-	parser.add_argument('--valueNN_lr', type=float, default=1e-5,help='ValueNN Learning Rate (default: 18)')
+	parser.add_argument('--ValueNN_lr', type=float, default=1e-5,help='ValueNN Learning Rate (default: 18)')
 	parser.add_argument('--ValueNN_bs', type=int, default=18,help='batch_size for each ValueNN iterations (default: 18)')
 
 	parser.add_argument('--MC_RollOut_Size', type=int, default=3000, help='default: 4096')
@@ -61,62 +61,74 @@ def Arguement():
 	return vars(parser.parse_args())
 
 def Generate_MoteCarloTree_Root(Classifier, ValueNN, Imgs, Data, itr, MC_Root_size, **kwargs):
-	print "Generating MonteCarloTree Root"
+	print "    Generating MonteCarloTree Root"
 	record = []
 	cnt = 0
 	for index, img, ques, ans, len_a, targets in Classifier_batch_generator(Imgs, Data, 1):
 		_, states = Classifier.forward(ValueNN, Variable(from_numpy(img)), Variable(from_numpy(ques)), Variable(from_numpy(ans)))
-		record.append([index, states[np.random.randint(0,26)], targets])
+		id = np.random.randint(0, len(index))
+		step = np.random.randint(0,26)
+		record.append([index[id], step, states[step][id,:]])
 		cnt += 1
 		if cnt == MC_Root_size: break;
 	return record
 
-def Generate_ValueNN_train_data(Classifier, records, Img, Data, Itr, **kwargs):
-	print "Generating ValueNN Train Date"
+def Generate_ValueNN_train_data(Classifier, records, Img, Data, Itr, ValueNNDataPath, **kwargs):
+	print "    Generating ValueNN Train Date"
 	Record = []
-	for index, state, targets in records:
-		xid = np.random.randint(0,state.shape[0])
-		Tree = MonteCarloTree_Module(Classifier, state[xid], Data['question'], Data['answer'], Img[index], targets)
+	for index, step, state in records:
+		Tree = MonteCarloTree_Module(Classifier, state, Data['question'][index,step:], Data['answer'][index,:], Img[index,:,:], Data['target'][index,:])
 		value = Tree.Generate(1000)
-		Record.append([state[xid], value, index])
-	Pickle.dump(Record, open(path.join(ValueNNDataPath,"ValueNN Train " + str(Itr)), 'w'))
+		Record.append([index, state.data.numpy(), value])
+	file = open(path.join(ValueNNDataPath,"ValueNN_Train_" + str(Itr)),'w+')
+	pickle.dump(Record, file)
 
-def Train_ValueNN(ValueNN, img, global_itr, ValueNN_bs, ValueNNDataPath, **kwargs):
+def Train_ValueNN(ValueNN, img, global_itr, ValueNN_bs, ValueNNDataPath, ValueNN_lr, ValueNN_itr, **kwargs):
 	imgs, states, targets = load_ValueNN_data(img, ValueNNDataPath, global_itr)
-	optimizer = optimer.adam(ValueNN.parameter(), lr =lr)
+	optimizer = optim.Adam([{"params":ValueNN.parameters()}], lr =ValueNN_lr)
 
 	for itr in xrange(ValueNN_itr):
+		Losses = []
 		for img, state, target in ValueNN_batch_generator(imgs, states, targets, ValueNN_bs):
-			RNN_emb = array([state for i in xrange(len(target))])
-			value = ValueNN.forward(Variable(from_numpy(RNN_emb)), Variable(from_numpy(img)))
-			loss = F.mseloss(value, target)
+			value = ValueNN.forward(Variable(from_numpy(state)), Variable(from_numpy(img)))
+			loss = F.mse_loss(value, Variable(from_numpy(target)))
 			loss.backward()
 			optimizer.step()
-			if itr % 1000 == 0:
-				print "ValueNN Iteration " + str(itr) + ": " + str(loss.data)
+			Losses.append(loss.data.numpy())			
+		if itr % 1000 == 0:
+			print "    ValueNN Iteration " + str(itr) + ": ",
+			print np.array(Losses).mean()
 
-def Train_Classifier(Classifier, ValueNN, imgs, data, Classifier_bs, **kwargs):
-	learning_rate = lr
-	optimizer = optimer.adam(Classifier.parameter(), lr =lr)
+def Train_Classifier(Classifier,
+ ValueNN, imgs, data, Classifier_bs, Classifier_lr, Classifier_itr, **kwargs):
+	# print list(Classifier.parameters())
+	optimizer = optim.Adam(filter(lambda p: p.requires_grad, Classifier.parameters()), lr =Classifier_lr)
 	for itr in xrange(Classifier_itr):
+		Losses = []
 		for _, img, ques, ans, len_a, target in Classifier_batch_generator(imgs, data, Classifier_bs):
-			confidence, _ = Classifier.forward(ValueNN, Variable(from_numpy(img)), Variable(from_numpy(ques)), Variable(from_numpy(ans)))
-			loss = F.binary_cross_entropy(confidence, target)
+			print img.shape, ques.shape, ans.shape
+			confidence, _ = Classifier.forward(ValueNN, Variable(from_numpy(img)), Variable(from_numpy(ques).long()), Variable(from_numpy(ans).long()))
+			# print confidence, target
+			loss = F.binary_cross_entropy(confidence, Variable(from_numpy(target).double()))
 			loss.backward()
 			optimizer.step()
-			if itr % 1000 == 0:
-				print "Classifier Iteration " + str(itr) + ": " + str(loss.data)
+			Losses.append(loss.data.numpy())
+		if itr % 1000 == 0:
+			print "    Classifier Iteration " + str(itr) + ": ",
+			print np.array(Losses).mean()
 
-def Valid(Classifier, ValueNN, Img, test_data, Classifier_bs, **kwargs):
-	record = zeros(len(test_data), 2)
-	for index, img, ques, ans, len_a, targets in Classifier_batch_generator(Imgs, data, Classifier_bs):
-		confidences, _ = Classifier.forward(ValueNN, from_numpy(img), from_numpy(ques), from_numpy(ans))
+def Valid(Classifier, ValueNN, Img, data, Classifier_bs, **kwargs):
+	record = zeros((len(data['question']), 2))
+	for index, img, ques, ans, len_a, targets in Classifier_batch_generator(Img, data, Classifier_bs):
+		confidences, _ = Classifier.forward(ValueNN, Variable(from_numpy(img)), Variable(from_numpy(ques)), Variable(from_numpy(ans)))
+		confidences = confidences.data.numpy()
 		for id, confidence, target in zip(index, confidences, targets):
-			if confidence > record[id / 4]:
-				record[id / 4][0] = confidence
+			print id, confidence, target
+			if confidence[0] > record[id / 4][0]:
+				record[id / 4][0] = confidence[0]
 				record[id / 4][1] = target[0]
 	acc = record[:,1] * test_data['target'][:,0]
-	return acc
+	return acc.mean()
 
 def Train(global_itr, **args):
 	train_img, train_data, test_img, test_data, emb_matrix = Get_Data(**args)
@@ -127,11 +139,12 @@ def Train(global_itr, **args):
 
 	for itr in xrange(global_itr):
 		print "Iteration " + str(itr)
+		accuracy = Valid(Classifier, ValueNN, test_img, test_data, **args)
+		Train_Classifier(Classifier, ValueNN, train_img, train_data, **args)
 		record = Generate_MoteCarloTree_Root(Classifier, ValueNN, train_img, train_data, itr, **args)
 		Generate_ValueNN_train_data(Classifier, record, train_img, train_data, itr, **args)
 		Train_ValueNN(ValueNN, train_img, itr, **args)
-		Train_Classifier(Classifier, ValueNN, train_img, train_data, **args)
-		accuracy = Valid(Classifier, ValueNN, test_img, test_data, **args)
+		
 		print 'Accuracy of test: ' + str(acc*1.0/len(result))
 
 

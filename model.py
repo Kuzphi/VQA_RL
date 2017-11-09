@@ -1,4 +1,5 @@
 import torch
+import math
 import torch.optim as optim
 import torch.nn.functional as F
 import numpy as np
@@ -39,18 +40,21 @@ class Classifier_Module(Module):
 		ans = self.Embed_lookup(Ans)
 		ans = ans.mean(dim = 1) 
 		for step in xrange(length):
-			choice = torch.zeros(4, 49).double()
+			choice = torch.zeros(bs, 49).double()
 			for region in xrange(49):
-				confidence = ValueNN.forward(Variable(hidden_state[-1].data, requires_grad = False), Img[:,region,:]).data
+				confidence = ValueNN.forward(Variable(hidden_state[-1].data), Img[:,region,:]).data
 				choice[:, region] = confidence.view(-1)
 			_, choice = choice.max(dim = 1)
 			select_img = Img[torch.arange(0, bs).long(), choice.long(), :]
-			word_ = self.WordTrans(ques[:,step,:])
-			img_  = self.ImgTrans(select_img)
-			QI = torch.mul(word_ , img_)
-			state = self.Cell(QI, hidden_state[-1])
+			state = self.OneStep(ques[:,step,:], select_img, hidden_state[-1])
 			hidden_state.append(state)
 		return self.Inference(ans, hidden_state), hidden_state
+
+	def OneStep(self, ques, img, hidden):
+		img_  = self.ImgTrans(img)
+		word_ = self.WordTrans(ques)
+		QI = torch.mul(word_ , img_)
+		return self.Cell(QI, hidden)
 
 	def Inference(self, Ans, hidden_state):
 		ans_ = self.AnsTrans(Ans)
@@ -62,45 +66,52 @@ class Node():
 	def __init__(self, state):
 		self.state = state
 		self.Q = self.P = 0
-		self.s = [None] * 49
+		self.son = [None] * 49
 		self.cnt = np.array([1.] * 49)
 		self.win = np.array([0.] * 49)
-	def Score():
+	def Score(self):
 		# Upper Confidence Bound
 		t = self.cnt.sum()
-		score = self.win / self.cnt + sqrt( 2 * log(t) / self.cnt)
+		score = np.divide(self.win, self.cnt) + np.sqrt( 2 * math.log(t) / self.cnt)
 		return score
 
 class MonteCarloTree_Module():
 	def __init__(self, Classifier, state, Ques, Ans, Img, Target):
-		self.root = Node(state)
-		self.words = Ques
-		print Ans.shape
-		self.Ans = Classifier.Embed_lookup(Variable(from_numpy(Ans).long())).mean(dim = 2)
-		self.Img = Img
-		self.Target = Target
+		print "Ques.shape: ", Ques.shape
+		self.root  		= Node(state.view(1,-1))
+		self.Ans   		= Classifier.Embed_lookup(Variable(from_numpy(Ans.reshape(1,-1) ).long())).mean(dim = 1)
+		self.words 		= Classifier.Embed_lookup(Variable(from_numpy(Ques.reshape(1,-1)).long()))
+		self.Img    	= Img 
+		self.Target 	= Target
 		self.Classifier = Classifier
 
 
 	def Sample(self, epsilon):
 		p = self.root
 		path = []
-		for word in self.Ques:
+		for word in self.words:
 			prob = uniform(0,1)
 			next = randint(0, 48) if uniform(0,1) < epsilon else p.Score().argmax()
 			if p.son[next] == None:
-				next_state = self.Classifier.Cell(p.state, self.Img[next])
+				# print p.state.shape, self.Img[:,next,:].shape
+				this_img    = Variable(from_numpy(self.Img[next,:].reshape(1,-1)))
+				# print word
+				# print this_img
+				# print p.state
+				next_state  = self.Classifier.OneStep(word, this_img, p.state)
 				p.son[next] = Node(next_state)
 			p = p.son[next]
 			path.append(next)
-		confidence = self.Classifier.inference(self.Ans, p.state)
- 		reward = 1 if confidence.argmax() == self.Target.argmax() else 0 
+		confidence = self.Classifier.Inference(self.Ans, p.state)
+ 		reward = 1 if confidence.data.numpy().argmax() == self.Target.argmax() else 0 
 		p = self.root
 		for node in path:
 			p.win[node] += reward
-			p = p.s[node]
+			p = p.son[node]
 
 	def Generate(self, Roll_Out_size):
 		for num in xrange(Roll_Out_size):
 			self.Sample(0.2)
-		return F.Softmax(self.root.win / self.root.cnt.sum(), dim = 1)
+		x = self.root.win / self.root.cnt.sum()
+		e_x = np.exp(x - np.max(x))
+		return e_x / e_x.sum()

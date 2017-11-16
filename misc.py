@@ -11,7 +11,7 @@ def right_align(seq, lengths):
 		v[i][N-lengths[i]:N]=seq[i][0:lengths[i]]
 	return v
 
-def Load_data(img_h5, ques_h5, data_type, testing = 1):
+def Load_data(img_h5, ques_h5, data_type, testing = 0):
 	data = {}
 	print('loading' + data_type + ' image feature...')
 	# -----0~82459------  at most 47000
@@ -23,7 +23,7 @@ def Load_data(img_h5, ques_h5, data_type, testing = 1):
 	else:
 		with h5py.File(img_h5,'r') as hf:
 			tem = hf.get('images' + data_type)
-			img_feature = np.array(tem).reshape(-1, 49, 2048)
+			img_feature = np.array(tem,dtype = np.float64).reshape(-1, 49, 2048)			
 			print img_feature.shape
 
 	print('loading' + data_type + ' h5 file...')
@@ -73,14 +73,20 @@ def Get_Data(ques_h5, train_img_h5, test_img_h5, **kwargs):
 
 	return train_img_feature, train_data, test_img_feature, test_data, emb_matrix
 
-def Classifier_batch_generator(Imgs, data, batch_size):
+def Classifier_batch_generator(Imgs, data, batch_size, neg_size, total = 9999999):
 	sz = data['question'].shape[0]
 	index = np.arange(sz / 4) * 4
 	np.random.shuffle(index)
-	i = 0
+	i, lim = 0, 0
 	while i < index.shape[0]:
 		pos = index[i:i + batch_size]
-		neg = [np.random.choice([id+1, id+2, id+3], 3, replace = False) for id in pos]
+		i += batch_size
+		if i > total:
+			break;
+		if i > lim:
+			print "\t" + str(i) + "/" + str(index.shape[0])
+			lim += 10000 
+		neg = [np.random.choice([id+1, id+2, id+3], neg_size, replace = False) for id in pos]
 		neg = list(itertools.chain(*neg))
 		np.random.shuffle(neg)
 		batch_index = list(pos) + list(neg)
@@ -106,16 +112,24 @@ def ValueNN_batch_generator(img, state, targets, batch_size):
 	i = 0
 	while i < img.shape[0]:
 		index = idx[i:i + batch_size]
+		i += batch_size
 		yield img[index], state[index], targets[index]
 
 def load_ValueNN_data(global_img, ValueNNDataPath, itr):
 	with open(path.join(ValueNNDataPath,"ValueNN_Train_" + str(itr)), 'rb') as file:
 		record = pickle.load(file)
 	imgs, states, targets = [], [], []
-	for index, state, target in record:
+	for img_index, state, target in record:
 		states = states + [state] * 49
 		targets = targets + list(target)
-		imgs = imgs + list(global_img[index,:,:])
+		imgs = imgs + list(global_img[img_index,:,:])
 	return array(imgs), array(states), array(targets)
+
+def fetch_records(records, Img, Data):
+	for index, step, state in records:
+		# print index
+		# print type(index)
+		img_index = Data['img_list'][index]
+		yield img_index, state, Data['question'][index,step:], Data['answer'][index,:], Img[img_index,:,:], Data['target'][index,:]
 
 

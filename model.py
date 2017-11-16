@@ -3,10 +3,13 @@ import math
 import torch.optim as optim
 import torch.nn.functional as F
 import numpy as np
-from torch import from_numpy, arange, tensor
+from torch import from_numpy, arange, Tensor
 from torch.autograd import Variable
 from torch.nn import Module, Linear, GRUCell, Embedding
 from random import uniform, randint
+
+
+
 class ValueNN_Module(Module):
 	def __init__(self, **args):
 		super(ValueNN_Module, self).__init__()
@@ -25,6 +28,7 @@ class Classifier_Module(Module):
 		self.ImgTrans     = Linear(args['image_dim'], args['Classifier_Trans_dim']).double()
 		self.AnsTrans     = Linear(args['word_dim'],  args['RNN_output_dim']).double()
 		self.Classify     = Linear(args['RNN_output_dim'], args['classify_dim']).double()
+		self.img_dim      = args['image_dim']
 		self.input_dim    = args['RNN_input_dim']
 		self.emb_dim      = args['RNN_emb_dim']
 		self.Embed_lookup = Embedding(*Embed_matrix.shape).double()
@@ -32,21 +36,41 @@ class Classifier_Module(Module):
 		self.Embed_lookup.weight.requires_grad = False
 		self.Cell = GRUCell(input_size = args['Classifier_Trans_dim'], hidden_size = args['RNN_emb_dim']).double()
 
+
+	def _process_one(self, ValueNN, state, img, choice, region):
+		confidence = ValueNN.forward(state, img)
+		choice[:, region] = confidence.view(-1)
+
+
 	def forward(self, ValueNN, Img, Ques, Ans):
 		bs, length = Ques.data.size()
-		Init_state = Variable(torch.zeros((bs, self.emb_dim)).double())
+		Init_state = Variable(torch.zeros((bs, self.emb_dim)).double()).cuda()
 		hidden_state = [Init_state]
 		ques = self.Embed_lookup(Ques)
 		ans = self.Embed_lookup(Ans)
 		ans = ans.mean(dim = 1) 
+
 		for step in xrange(length):
 			choice = torch.zeros(bs, 49).double()
+			process = []
 			for region in xrange(49):
-				confidence = ValueNN.forward(Variable(hidden_state[-1].data), Img[:,region,:]).data
-				choice[:, region] = confidence.view(-1)
+				confidence = ValueNN.forward(Variable(hidden_state[-1].data).cuda(), Img[:,region,:])
+				choice[:, region] = confidence.view(-1).data
+			# for region in xrange(49):
+			# 	this_state = Variable(hidden_state[-1].data).cuda()
+			# 	p = torch.multiprocessing.Process(target= self._process_one, args=  (ValueNN, this_state, Img[:,region,:], choice, region) )
+			# 	p.start()
+			# 	process.append(p)
+
+			# for p in process:
+			# 	p.join()
+
 			_, choice = choice.max(dim = 1)
-			select_img = Img[torch.arange(0, bs).long(), choice.long(), :]
-			state = self.OneStep(ques[:,step,:], select_img, hidden_state[-1])
+			select_img = Tensor(bs, self.img_dim).double()
+			for i in xrange(bs):
+				select_img[i,:] = Img[i, choice[i],:].data
+			# select_img = Img[torch.arange(0, bs).int(), choice.int(), :]
+			state = self.OneStep(ques[:,step,:].cuda(), Variable(select_img).cuda(), hidden_state[-1].cuda())
 			hidden_state.append(state)
 		return self.Inference(ans, hidden_state), hidden_state
 
@@ -77,14 +101,12 @@ class Node():
 
 class MonteCarloTree_Module():
 	def __init__(self, Classifier, state, Ques, Ans, Img, Target):
-		print "Ques.shape: ", Ques.shape
 		self.root  		= Node(state.view(1,-1))
-		self.Ans   		= Classifier.Embed_lookup(Variable(from_numpy(Ans.reshape(1,-1) ).long())).mean(dim = 1)
-		self.words 		= Classifier.Embed_lookup(Variable(from_numpy(Ques.reshape(1,-1)).long()))
+		self.Ans   		= Classifier.Embed_lookup(Variable(from_numpy(Ans.reshape(1,-1) ).long()).cuda()).mean(dim = 1)
+		self.words 		= Classifier.Embed_lookup(Variable(from_numpy(Ques).long()).cuda())
 		self.Img    	= Img 
 		self.Target 	= Target
 		self.Classifier = Classifier
-
 
 	def Sample(self, epsilon):
 		p = self.root
@@ -94,22 +116,20 @@ class MonteCarloTree_Module():
 			next = randint(0, 48) if uniform(0,1) < epsilon else p.Score().argmax()
 			if p.son[next] == None:
 				# print p.state.shape, self.Img[:,next,:].shape
-				this_img    = Variable(from_numpy(self.Img[next,:].reshape(1,-1)))
-				# print word
-				# print this_img
-				# print p.state
-				next_state  = self.Classifier.OneStep(word, this_img, p.state)
+				this_img    = Variable(from_numpy(self.Img[next,:].reshape(1,-1))).cuda()
+				next_state  = self.Classifier.OneStep(word.view(1,-1), this_img, p.state)
 				p.son[next] = Node(next_state)
 			p = p.son[next]
 			path.append(next)
 		confidence = self.Classifier.Inference(self.Ans, p.state)
- 		reward = 1 if confidence.data.numpy().argmax() == self.Target.argmax() else 0 
+ 		reward = 1 if confidence.data.cpu().numpy().argmax() == self.Target.argmax() else 0 
 		p = self.root
 		for node in path:
 			p.win[node] += reward
 			p = p.son[node]
 
 	def Generate(self, Roll_Out_size):
+		print "\t\tGenerating Sample";
 		for num in xrange(Roll_Out_size):
 			self.Sample(0.2)
 		x = self.root.win / self.root.cnt.sum()

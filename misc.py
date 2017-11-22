@@ -1,9 +1,13 @@
+from __future__ import print_function
+
 import numpy as np
 from numpy import array
 import h5py
 import pickle
 import itertools
 from os import path
+
+
 def right_align(seq, lengths):
 	v = np.zeros(np.shape(seq), dtype = np.int64)
 	N = np.shape(seq)[1]
@@ -13,7 +17,7 @@ def right_align(seq, lengths):
 
 def Load_data(img_h5, ques_h5, data_type, testing = 0):
 	data = {}
-	print('loading' + data_type + ' image feature...')
+	print('loading ' + data_type[1:] + ' image feature...')
 	# -----0~82459------  at most 47000
 	if testing:
 		if data_type == '_train':
@@ -24,9 +28,9 @@ def Load_data(img_h5, ques_h5, data_type, testing = 0):
 		with h5py.File(img_h5,'r') as hf:
 			tem = hf.get('images' + data_type)
 			img_feature = np.array(tem,dtype = np.float64).reshape(-1, 49, 2048)			
-			print img_feature.shape
+			print(img_feature.shape)
 
-	print('loading' + data_type + ' h5 file...')
+	print('loading ' + data_type[1:] + ' h5 file...')
 	with h5py.File(ques_h5,'r') as hf:
 		# total number of training data is 215375
 		# question is (26, )
@@ -53,16 +57,21 @@ def Load_data(img_h5, ques_h5, data_type, testing = 0):
 		data['ques_pos'] = np.array(hf.get('pos' + data_type +'_ques')) - 1
 		data['ans_pos']  = np.array(hf.get('pos' + data_type +'_ans'))  - 1
 	print('question & answer aligning')
-	if testing:
-		data['question'] = right_align(data['question'][:100], data['length_q'][:100])
-		data['answer']   = right_align(data['answer'][:100],   data['length_a'][:100])
-		data['ques_pos'] = right_align(data['ques_pos'][:100], data['length_q'][:100])
-		data['ans_pos']  = right_align(data['ans_pos'][:100],  data['length_a'][:100])
+	if path.exists("../data/question" + data_type):
+		data['question'] = numpy.load("../data/" + 'question' + data_type)
+		data['answer']   = numpy.load("../data/" + 'answer' + data_type)
+		data['ques_pos'] = numpy.load("../data/" + 'ques_pos' + data_type)
+		data['ans_pos']  = numpy.load("../data/" + 'ans_pos' + data_type)
 	else:
 		data['question'] = right_align(data['question'], data['length_q'])
 		data['answer']   = right_align(data['answer'],   data['length_a'])
 		data['ques_pos'] = right_align(data['ques_pos'], data['length_q'])
 		data['ans_pos']  = right_align(data['ans_pos'],  data['length_a'])
+	keys = ['question','answer','ques_pos','ans_pos']
+	for key in keys:
+		with open("../data/" + key + data_type, 'w+') as file:
+			data[key].dump(file)
+
 	return img_feature, data
 
 def Get_Data(ques_h5, train_img_h5, test_img_h5, **kwargs):
@@ -81,15 +90,13 @@ def Classifier_batch_generator(Imgs, data, batch_size, neg_size, total = 9999999
 	while i < index.shape[0]:
 		pos = index[i:i + batch_size]
 		i += batch_size
-		if i > total:
-			break;
 		if i > lim:
-			print "\t" + str(i) + "/" + str(index.shape[0])
+			print("\t %d / %d" % (i, index.shape[0]))
 			lim += 10000 
 		neg = [np.random.choice([id+1, id+2, id+3], neg_size, replace = False) for id in pos]
 		neg = list(itertools.chain(*neg))
 		np.random.shuffle(neg)
-		batch_index = list(pos) + list(neg)
+		batch_index = array(list(pos) + list(neg),dtype = np.int32)
 		np.random.shuffle(batch_index)
 
 		question = data['question'][batch_index,:]

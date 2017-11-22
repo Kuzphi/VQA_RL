@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import torch
 import math
 import torch.optim as optim
@@ -7,8 +9,6 @@ from torch import from_numpy, arange, Tensor
 from torch.autograd import Variable
 from torch.nn import Module, Linear, GRUCell, Embedding
 from random import uniform, randint
-
-
 
 class ValueNN_Module(Module):
 	def __init__(self, **args):
@@ -50,13 +50,14 @@ class Classifier_Module(Module):
 		ans = self.Embed_lookup(Ans)
 		ans = ans.mean(dim = 1) 
 
-		for step in xrange(length):
-			choice = torch.zeros(bs, 49).double()
-			process = []
-			for region in xrange(49):
+		for step in range(length):
+			choice = torch.zeros(bs, 49).cuda().double()			
+			for region in range(49):
 				confidence = ValueNN.forward(Variable(hidden_state[-1].data).cuda(), Img[:,region,:])
 				choice[:, region] = confidence.view(-1).data
-			# for region in xrange(49):
+
+			# process = []
+			# for region in range(49):
 			# 	this_state = Variable(hidden_state[-1].data).cuda()
 			# 	p = torch.multiprocessing.Process(target= self._process_one, args=  (ValueNN, this_state, Img[:,region,:], choice, region) )
 			# 	p.start()
@@ -67,7 +68,7 @@ class Classifier_Module(Module):
 
 			_, choice = choice.max(dim = 1)
 			select_img = Tensor(bs, self.img_dim).double()
-			for i in xrange(bs):
+			for i in range(bs):
 				select_img[i,:] = Img[i, choice[i],:].data
 			# select_img = Img[torch.arange(0, bs).int(), choice.int(), :]
 			state = self.OneStep(ques[:,step,:].cuda(), Variable(select_img).cuda(), hidden_state[-1].cuda())
@@ -122,15 +123,18 @@ class MonteCarloTree_Module():
 			p = p.son[next]
 			path.append(next)
 		confidence = self.Classifier.Inference(self.Ans, p.state)
- 		reward = 1 if confidence.data.cpu().numpy().argmax() == self.Target.argmax() else 0 
+		reward = 0
+		if confidence.data.cpu().numpy().argmax() == self.Target.argmax():
+			reward = 1
+ 		# reward = 1 if confidence.data.cpu().numpy().argmax() == self.Target.argmax() else 0 
 		p = self.root
 		for node in path:
 			p.win[node] += reward
 			p = p.son[node]
 
 	def Generate(self, Roll_Out_size):
-		print "\t\tGenerating Sample";
-		for num in xrange(Roll_Out_size):
+		print("\t\tGenerating Sample")
+		for num in range(Roll_Out_size):
 			self.Sample(0.2)
 		x = self.root.win / self.root.cnt.sum()
 		e_x = np.exp(x - np.max(x))

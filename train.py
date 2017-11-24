@@ -84,7 +84,7 @@ def Generate_ValueNN_train_data(Classifier, records, Img, Data, Itr, ValueNNData
 		Tree = MonteCarloTree_Module(Classifier, state, ques, ans, img, target)
 		value = Tree.Generate(10000)
 		Record.append([img_index, state.data.cpu().numpy(), value])
-	file = open(path.join(ValueNNDataPath,"ValueNN_Train_" + str(Itr)),'w+')
+	file = open(path.join(ValueNNDataPath,"ValueNN_Train_" + str(Itr)),'wb+')
 	pickle.dump(Record, file)
 
 def Train_ValueNN(ValueNN, img, global_itr, ValueNN_bs, ValueNNDataPath, ValueNN_lr, ValueNN_itr, **kwargs):

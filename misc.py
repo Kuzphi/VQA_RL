@@ -56,20 +56,20 @@ def Load_data(img_h5, ques_h5, data_type, testing = 0):
 
 		data['ques_pos'] = np.array(hf.get('pos' + data_type +'_ques')) - 1
 		data['ans_pos']  = np.array(hf.get('pos' + data_type +'_ans'))  - 1
-	print('question & answer aligning')
 	if path.exists("../data/question" + data_type):
-		data['question'] = numpy.load("../data/" + 'question' + data_type)
-		data['answer']   = numpy.load("../data/" + 'answer' + data_type)
-		data['ques_pos'] = numpy.load("../data/" + 'ques_pos' + data_type)
-		data['ans_pos']  = numpy.load("../data/" + 'ans_pos' + data_type)
+		data['question'] = np.load("../data/" + 'question' + data_type)
+		data['answer']   = np.load("../data/" + 'answer' + data_type)
+		data['ques_pos'] = np.load("../data/" + 'ques_pos' + data_type)
+		data['ans_pos']  = np.load("../data/" + 'ans_pos' + data_type)
 	else:
+		print('question & answer aligning')
 		data['question'] = right_align(data['question'], data['length_q'])
 		data['answer']   = right_align(data['answer'],   data['length_a'])
 		data['ques_pos'] = right_align(data['ques_pos'], data['length_q'])
 		data['ans_pos']  = right_align(data['ans_pos'],  data['length_a'])
 	keys = ['question','answer','ques_pos','ans_pos']
 	for key in keys:
-		with open("../data/" + key + data_type, 'w+') as file:
+		with open("../data/" + key + data_type, 'wb') as file:
 			data[key].dump(file)
 
 	return img_feature, data

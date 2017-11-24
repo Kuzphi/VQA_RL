@@ -32,28 +32,13 @@ def Arguement():
 	parser.add_argument('--classify_dim',      type=int,   default=2,    help='output dimension (default: 2)')
 	
 	# parser.add_argument('--decay_factor',    type=float, default=0.99997592083, help='decay factor of learning rate')
-	
+	parser.add_argument('--Classifier_lr', type=float, default=1e-5,help='Classifier Learning Rate (default: 1e-5)')
+	parser.add_argument('--Classifier_itr', type=int, default=18,help='Classifier Iteration (default: 18)')
+
 	parser.add_argument('--RNN_input_dim',  type=int,   default=300,  help='RNN_input_size (default: 300)')
 	parser.add_argument('--RNN_output_dim',  type=int,   default=512,  help='RNN_input_size (default: 300)')
 	parser.add_argument('--RNN_emb_dim', type=int,   default=512,  help='RNN_hidden_size (default: 512)')	
-	parser.add_argument('--Classifier_lr', type=float, default=1e-5,help='Classifier Learning Rate (default: 1e-5)')
-	parser.add_argument('--Classifier_bs', type=int, default=18,help='batch_size for each Classifier iterations (default: 18)')
-	parser.add_argument('--Classifier_Trans_dim', type=int,  default=4096, help='default: 4096')
-	# parser.add_argument('--Classifier_ImgTrans_dim', type=int,  default=4096, help='default: 4096')
-	# parser.add_argument('--Classifier_AnsTrans_dim', type=int,  default=4096, help='default: 4096')
-	# parser.add_argument('--Classifier_QuesTrans_dim', type=int, default=4096, help='default: 4096')
-	parser.add_argument('--Classifier_itr', type=int, default=1,help='Classifier Iteration (default: 18)')
-	
-	parser.add_argument('--ValueNN_RNN2Value_dim', type=int, default=500, help='ValueNN Embedding trans dimension  (default: 500)')
-	parser.add_argument('--ValueNN_Img2Value_dim', type=int, default=500, help='ValueNN Images trans dimension (default: 500)')
-	parser.add_argument('--ValueNN_itr', type=int, default=50, help='ValueNN training maximum Iteration  (default: 10)')
-	parser.add_argument('--ValueNN_lr', type=float, default=1e-5,help='ValueNN Learning Rate (default: 18)')
-	parser.add_argument('--ValueNN_bs', type=int, default=18,help='batch_size for each ValueNN iterations (default: 18)')
-
-	parser.add_argument('--MC_RollOut_Size', type=int, default=3000, help='default: 4096')
-	parser.add_argument('--MC_Root_size', type=int, default=1,help='default: 1000')
-
-
+	parser.add_argument('--trans_dim', type=int, default=500, help='ValueNN Embedding trans dimension  (default: 500)')
 
 	#Misc
 	parser.add_argument('--ValueNNDataPath', type=str, default="../data/ValueNN/", help='path for storing ValueNN train data')
@@ -67,28 +52,35 @@ def Arguement():
 
 
 class Model(Module):
-	def __init__(self, **args):
-		super(ValueNN_Module, self).__init__()
+	def __init__(self, Embed_matrix, **args):
+		super(Model, self).__init__()
 		self.emb_dim    = args['RNN_emb_dim']
-		self.QuesGRU    = GRU(input_size = args['RNN_input_dim'], hidden_size = args['RNN_emb_dim'], batch_first = 1)
-		self.AnsGRU     = GRU(input_size = args['RNN_input_dim'], hidden_size = args['RNN_emb_dim'], batch_first = 1)
-		self.Qtrans 	= Linear(args['RNN_output_dim'], args['trans_dim'])
-		self.Atrans 	= Linear(args['RNN_output_dim'], args['trans_dim'])
-		self.Itrans 	= Linear(args['image_dim']     , args['trans_dim'])
-		self.QItrans 	= Linear(args['RNN_output_dim'], args['trans_dim'])
-		self.QIAtrans 	= Linear(args['RNN_output_dim'], args['trans_dim'])
-		self.classifier = Linear(args['trans_dim']	   , args['classify_dim'])
+		self.QuesGRU    = nn.GRU(input_size = args['RNN_input_dim'], hidden_size = args['RNN_emb_dim'], num_layers = 1, batch_first = 1).double()
+		self.AnsGRU     = nn.GRU(input_size = args['RNN_input_dim'], hidden_size = args['RNN_emb_dim'], num_layers = 1, batch_first = 1).double()
+		self.Qtrans 	= Linear(args['RNN_output_dim'] , args['trans_dim']).double()
+		self.Atrans 	= Linear(args['RNN_output_dim'] , args['trans_dim']).double()
+		self.Itrans 	= Linear(args['image_dim']      , args['trans_dim']).double()
+		self.QItrans 	= Linear(args['trans_dim']		, args['trans_dim']).double()
+		self.QIAtrans 	= Linear(args['trans_dim']		, args['trans_dim']).double()
+		self.classifier = Linear(args['trans_dim']	    , args['classify_dim']).double()
+		self.Embed_lookup = Embedding(*Embed_matrix.shape).double()
+		self.Embed_lookup.weight.data.copy_(from_numpy(Embed_matrix).double())
+		self.Embed_lookup.weight.requires_grad = False
+
 	def forward(self, Img, Ques, Ans):
-		bs = I.shape[0]
-		Qh0 = Variable(torch.randn(1, bs, self.emb_dim))
-		Q, Qh = self.QuesGRU(Ques, Qh0)
-		Q = self.Qtrans(Q[-1,:,1])
+		_Ans  = self.Embed_lookup(Ans)
+		_Ques = self.Embed_lookup(Ques)
 
-		Ah0 = Variable(torch.randn(1, bs, self.emb_dim))
-		A, Ah = self.AnsGRU(Ans, Ah0)
-		A = self.Atrans(A[-1,:,1])
+		bs = Img.shape[0]
+		Qh0 = Variable(torch.randn(1, bs, self.emb_dim)).cuda().double()
+		Q, Qh = self.QuesGRU(_Ques, Qh0)
+		Q = self.Qtrans(Q[:, -1, :])
 
-		I = self.Itrans(I.mean(dim = 1))
+		Ah0 = Variable(torch.randn(1, bs, self.emb_dim)).cuda().double()
+		A, Ah = self.AnsGRU(_Ans, Ah0)
+		A = self.Atrans(A[:, -1, :])
+
+		I = self.Itrans(Img.mean(dim = 1))
 		QI = self.QItrans(Q * I)
 
 		QIA = self.QIAtrans(QI * A)
@@ -97,37 +89,43 @@ class Model(Module):
 
 def Valid(Model, Img, data, bs, **kwargs):
 	print ("\tValiding")
-	record = {}
+	record, res= {}, {}
 	for index, img, ques, ans, len_a, targets in tqdm(Classifier_batch_generator(Img, data, bs, 3)):
-		confi = Model.forward(Variable(Img), Varibale(ques), Variable(ans))
+		confidences = Model.forward(	Variable(from_numpy(img), volatile = True).cuda(),
+								Variable(from_numpy(ques).long(), volatile = True).cuda(),
+								Variable(from_numpy(ans).long() , volatile = True).cuda() 
+							).cpu()
 		for id, confidence, target in zip(index, confidences, targets):
 			# print id, confidence, target
-			if (not record.has_key(id / 4)) or confidence[0] > record[id / 4][0]:
-				record[id / 4] = [confidence[0], target[0]]
-
-	acc = 1.0 * array(record.values())[:,1].sum() / len(record)
+			if (id / 4 not in record) or confidence[0] > record[id / 4]:
+				record[id / 4] = confidence[0]
+				res[id / 4] = target[0]
+	acc = 1.0 * sum(res.values()) / len(record)
 	print ('\tAccuracy of test: %d'%(acc))
 
 
-def Train(global_itr, **args):
+def Train(global_itr, Classifier_itr, Classifier_lr, **args):
 	train_img, train_data, test_img, test_data, emb_matrix = Get_Data(**args)
 	num_train = train_data['question'].shape[0]
-
-	model   = Model(**args).cuda()
+	model   = Model(Embed_matrix = emb_matrix, **args).cuda()
+	Valid(model, test_img, test_data, 100, **args)
 
 	optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr = Classifier_lr)
 	for itr in range(Classifier_itr):
-		print ("Iteration %d :")
+		print ("Iteration %d :"%(itr))
 		Losses = []
-		for _, img, ques, ans, len_a, target in tqdm(Classifier_batch_generator(imgs, data, Classifier_bs, 1)):
+		for _, img, ques, ans, len_a, target in tqdm(Classifier_batch_generator(train_img, train_data, 18, 1)):
 			optimizer.zero_grad()
-			confi = model.forward(img,ques,ans)
-			loss = F.binary_cross_entropy(confidence, Variable(from_numpy(target)))
+			confi = model.forward(	Variable(from_numpy(img)).cuda(),
+									Variable(from_numpy(ques).long()).cuda(),
+									Variable(from_numpy(ans).long()).cuda()).cpu()
+			loss = F.binary_cross_entropy(confi, Variable(from_numpy(target)).double())
 			loss.backward()
 			optimizer.step()
 			Losses.append(loss.data.numpy())
 		print("\tTraining Loss : %.3f"%(np.array(Losses).mean()))
-		if itr % 10 == 0:
+		if itr and itr % 5 == 0:
+			Valid(model, test_img, test_data, 8, **args)
 			print("\tValid Accuracy : %.3f"%( Valild(Model, test_img, test_data, 20) ))
 
 if __name__ == '__main__':

@@ -25,7 +25,7 @@ def Arguement():
 	parser.add_argument('--test_img_h5',  type=str, default='../data/spatial_data_img_residule_test_14by14to7by7_norm.h5', 
 						help='path of testing image feature')
 	parser.add_argument('--ques_h5',type=str, default='../data/data_prepro_0417_v1.h5',help='path of question data')
-
+	parser.add_argument('--model_save',type=str, default='../model/',help='path of question data')
 	# Training parameter
 	parser.add_argument('--word_dim',        type=int,   default=300,  help='word feature size (default: 300)')
 	parser.add_argument('--image_dim',       type=int,   default=2048, help='image feature size (default: 2048)')
@@ -103,16 +103,18 @@ def Valid(Model, Img, data, bs, **kwargs):
 				res[id // 4] = target[0]
 
 	acc = sum(res.values()) / len(record)
-	print ('\tAccuracy of test: %.4f'%(acc))
+	return acc
+	
 
 
-def Train(global_itr, Classifier_itr, Classifier_lr, **args):
+def Train(global_itr, Classifier_itr, Classifier_lr, model_save, **args):
 	train_img, train_data, test_img, test_data, emb_matrix = Get_Data(**args)
 	num_train = train_data['question'].shape[0]
 	model   = Model(Embed_matrix = emb_matrix, **args).cuda()
 	optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr = Classifier_lr)
 
 	# Valid(model, test_img, test_data, 8, **args)
+	best = 0
 	for itr in range(Classifier_itr):
 		print ("Iteration %d :"%(itr))
 		Losses = []
@@ -127,7 +129,15 @@ def Train(global_itr, Classifier_itr, Classifier_lr, **args):
 			Losses.append(loss.data.numpy())
 		print("\tTraining Loss : %.3f"%(np.array(Losses).mean()))
 		if itr and itr % 5 == 0:
-			Valid(model, test_img, test_data, 8, **args)
+			acc = Valid(model, test_img, test_data, 8, **args)
+			print ('\tAccuracy of test: %.4f'%(acc))
+			if acc > best:
+				best = acc
+				torch.save({
+					'state_dict': model.state_dict(),
+					'optimizer' : optimizer.state_dict(),
+					}, model_save + str(best))
+
 
 
 if __name__ == '__main__':

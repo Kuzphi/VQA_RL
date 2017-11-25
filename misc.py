@@ -73,7 +73,8 @@ def Load_data(img_h5, ques_h5, data_type, testing = 0):
 			print(key)
 			with open("../data/" + key + data_type, 'wb') as file:
 				data[key].dump(file)
-		print('Finishing the ques & ans file')
+		print('Finish the ques & ans file')
+	print('Finish loading data')
 	return img_feature, data
 
 def Get_Data(ques_h5, train_img_h5, test_img_h5, **kwargs):
@@ -104,7 +105,6 @@ def Classifier_batch_generator(Imgs, data, batch_size, neg_size, total = 9999999
 		question = data['question'][batch_index,:]
 		length_q = data['length_q'][batch_index]
 		answer   = data['answer'][batch_index]
-		length_a = data['length_a'][batch_index]
 		img_list = data['img_list'][batch_index]
 		target   = data['target'][batch_index]
 

@@ -109,10 +109,12 @@ def Valid(Model, Img, data, bs, **kwargs):
 
 def Train(global_itr, Classifier_itr, Classifier_lr, model_save, **args):
 	train_img, train_data, test_img, test_data, emb_matrix = Get_Data(**args)
+	print("AAAAA")
 	num_train = train_data['question'].shape[0]
 	model   = Model(Embed_matrix = emb_matrix, **args).cuda()
+	print("construct model")
 	optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr = Classifier_lr)
-
+	print("construct optimizer")
 	# Valid(model, test_img, test_data, 8, **args)
 	print("start training");
 	best = 0

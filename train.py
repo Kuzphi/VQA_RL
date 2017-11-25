@@ -154,5 +154,5 @@ def Train(global_itr, **args):
 if __name__ == '__main__':
 	# torch.multiprocessing.set_start_method("spawn")
 	args = Arguement()
-	with torch.cuda.device(3):
+	with torch.cuda.device(1):
 		Train(**args)

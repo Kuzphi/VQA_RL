@@ -114,6 +114,11 @@ def Train(global_itr, Classifier_itr, Classifier_lr, model_save, **args):
 	optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr = Classifier_lr)
 
 	# Valid(model, test_img, test_data, 8, **args)
+	torch.save({
+		'state_dict': model.state_dict(),
+		'optimizer' : optimizer.state_dict(),
+		'parameters': gargs
+		}, model_save + str(best))
 	best = 0
 	for itr in range(Classifier_itr):
 		print ("Iteration %d :"%(itr))
@@ -136,13 +141,15 @@ def Train(global_itr, Classifier_itr, Classifier_lr, model_save, **args):
 				torch.save({
 					'state_dict': model.state_dict(),
 					'optimizer' : optimizer.state_dict(),
+					'parameters': gargs
 					}, model_save + str(best))
 
 
 
 if __name__ == '__main__':
 	# torch.multiprocessing.set_start_method("spawn")
-	args = Arguement()
+	global gargs
+	gargs = Arguement()
 	# torch.setdefaulttensortype('torch.DoubleTensor')
 	# with torch.cuda.device(3):
-	Train(**args)
+	Train(**gargs)

@@ -111,7 +111,7 @@ def Classifier_batch_generator(Imgs, data, batch_size, neg_size, total = 9999999
 
 		target = np.array(target);
 		img = Imgs[img_list,:]
-		yield batch_index, img, question, answer, length_a, target
+		yield batch_index, img, question, answer, target
 
 def ValueNN_batch_generator(img, state, targets, batch_size):
 	idx = np.arange(img.shape[0])

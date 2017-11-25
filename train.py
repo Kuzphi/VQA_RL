@@ -128,11 +128,11 @@ def Valid(Classifier, ValueNN, Img, data, Classifier_bs, **kwargs):
 		confidences = confidences.cpu().data.numpy()
 		for id, confidence, target in zip(index, confidences, targets): 
 			# print id, confidence, target
-			if (not record.has_key(id / 4)) or confidence[0] > record[id / 4][0]:
-				record[id / 4] = [confidence[0], target[0]]
+			if (not record.has_key(id // 4)) or confidence[0] > record[id // 4][0]:
+				record[id // 4] = [confidence[0], target[0]]
 
-	acc = 1.0 * array(record.values())[:,1].sum() / len(record)
-	print ('\tAccuracy of test: %d'%(acc))
+	acc = array(record.values())[:,1].sum() / len(record)
+	print ('\tAccuracy of test: %.4f'%(acc))
 
 def Train(global_itr, **args):
 	train_img, train_data, test_img, test_data, emb_matrix = Get_Data(**args)

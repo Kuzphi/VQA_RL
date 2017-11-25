@@ -33,7 +33,7 @@ def Arguement():
 	
 	# parser.add_argument('--decay_factor',    type=float, default=0.99997592083, help='decay factor of learning rate')
 	parser.add_argument('--Classifier_lr', type=float, default=1e-5,help='Classifier Learning Rate (default: 1e-5)')
-	parser.add_argument('--Classifier_itr', type=int, default=18,help='Classifier Iteration (default: 18)')
+	parser.add_argument('--Classifier_itr', type=int, default=100,help='Classifier Iteration (default: 18)')
 
 	parser.add_argument('--RNN_input_dim',  type=int,   default=300,  help='RNN_input_size (default: 300)')
 	parser.add_argument('--RNN_output_dim',  type=int,   default=512,  help='RNN_input_size (default: 300)')
@@ -90,31 +90,33 @@ class Model(Module):
 def Valid(Model, Img, data, bs, **kwargs):
 	print ("\tValiding")
 	record, res= {}, {}
-	for index, img, ques, ans, len_a, targets in tqdm(Classifier_batch_generator(Img, data, bs, 3)):
+	for index, img, ques, ans, targets in tqdm(Classifier_batch_generator(Img, data, bs, 3)):
 		confidences = Model.forward(	Variable(from_numpy(img), volatile = True).cuda(),
 								Variable(from_numpy(ques).long(), volatile = True).cuda(),
 								Variable(from_numpy(ans).long() , volatile = True).cuda() 
 							).cpu()
 		for id, confidence, target in zip(index, confidences, targets):
 			# print id, confidence, target
-			if (id / 4 not in record) or confidence[0] > record[id / 4]:
-				record[id / 4] = confidence[0]
-				res[id / 4] = target[0]
-	acc = 1.0 * sum(res.values()) / len(record)
-	print ('\tAccuracy of test: %d'%(acc))
+			# print (id // 4, id, confidence[0], target[0])
+			if (id // 4 not in record) or confidence[0] > record[id // 4]:
+				record[id // 4] = confidence[0]
+				res[id // 4] = target[0]
+
+	acc = sum(res.values()) / len(record)
+	print ('\tAccuracy of test: %.4f'%(acc))
 
 
 def Train(global_itr, Classifier_itr, Classifier_lr, **args):
 	train_img, train_data, test_img, test_data, emb_matrix = Get_Data(**args)
 	num_train = train_data['question'].shape[0]
 	model   = Model(Embed_matrix = emb_matrix, **args).cuda()
-	Valid(model, test_img, test_data, 100, **args)
-
 	optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr = Classifier_lr)
+
+	# Valid(model, test_img, test_data, 8, **args)
 	for itr in range(Classifier_itr):
 		print ("Iteration %d :"%(itr))
 		Losses = []
-		for _, img, ques, ans, len_a, target in tqdm(Classifier_batch_generator(train_img, train_data, 18, 1)):
+		for _, img, ques, ans, target in tqdm(Classifier_batch_generator(train_img, train_data, 18, 1)):
 			optimizer.zero_grad()
 			confi = model.forward(	Variable(from_numpy(img)).cuda(),
 									Variable(from_numpy(ques).long()).cuda(),
@@ -126,7 +128,7 @@ def Train(global_itr, Classifier_itr, Classifier_lr, **args):
 		print("\tTraining Loss : %.3f"%(np.array(Losses).mean()))
 		if itr and itr % 5 == 0:
 			Valid(model, test_img, test_data, 8, **args)
-			print("\tValid Accuracy : %.3f"%( Valild(Model, test_img, test_data, 20) ))
+
 
 if __name__ == '__main__':
 	# torch.multiprocessing.set_start_method("spawn")

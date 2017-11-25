@@ -67,11 +67,13 @@ def Load_data(img_h5, ques_h5, data_type, testing = 0):
 		data['answer']   = right_align(data['answer'],   data['length_a'])
 		data['ques_pos'] = right_align(data['ques_pos'], data['length_q'])
 		data['ans_pos']  = right_align(data['ans_pos'],  data['length_a'])
-	keys = ['question','answer','ques_pos','ans_pos']
-	for key in keys:
-		with open("../data/" + key + data_type, 'wb') as file:
-			data[key].dump(file)
-
+		print('Saving the ques & ans file')
+		keys = ['question','answer','ques_pos','ans_pos']
+		for key in keys:
+			print(key)
+			with open("../data/" + key + data_type, 'wb') as file:
+				data[key].dump(file)
+		print('Finishing the ques & ans file')
 	return img_feature, data
 
 def Get_Data(ques_h5, train_img_h5, test_img_h5, **kwargs):

@@ -7,7 +7,7 @@ import torch.nn.functional as F
 import numpy as np
 from torch import from_numpy, arange, Tensor
 from torch.autograd import Variable
-from torch.nn import Module, Linear, GRUCell, Embedding
+from torch.nn import Module, Linear, GRUCell, Embedding, DataParallel
 from random import uniform, randint
 
 class ValueNN_Module(Module):
@@ -24,17 +24,17 @@ class ValueNN_Module(Module):
 class Classifier_Module(Module):
 	def __init__(self, Embed_matrix, **args):
 		super(Classifier_Module, self).__init__()
-		self.WordTrans    = Linear(args['word_dim'],  args['Classifier_Trans_dim']).double()
-		self.ImgTrans     = Linear(args['image_dim'], args['Classifier_Trans_dim']).double()
-		self.AnsTrans     = Linear(args['word_dim'],  args['RNN_output_dim']).double()
-		self.Classify     = Linear(args['RNN_output_dim'], args['classify_dim']).double()
+		self.WordTrans    = DataParallel( Linear(args['word_dim'],  args['Classifier_Trans_dim']).double()  )
+		self.ImgTrans     = DataParallel( Linear(args['image_dim'], args['Classifier_Trans_dim']).double()  )
+		self.AnsTrans     = DataParallel( Linear(args['word_dim'],  args['RNN_output_dim']).double()        )
+		self.Classify     = DataParallel( Linear(args['RNN_output_dim'], args['classify_dim']).double()     )
 		self.img_dim      = args['image_dim']
 		self.input_dim    = args['RNN_input_dim']
 		self.emb_dim      = args['RNN_emb_dim']
 		self.Embed_lookup = Embedding(*Embed_matrix.shape).double()
 		self.Embed_lookup.weight.data.copy_(from_numpy(Embed_matrix).double())
 		self.Embed_lookup.weight.requires_grad = False
-		self.Cell = GRUCell(input_size = args['Classifier_Trans_dim'], hidden_size = args['RNN_emb_dim']).double()
+		self.Cell = DataParallel( GRUCell(input_size = args['Classifier_Trans_dim'], hidden_size = args['RNN_emb_dim']).double() )
 
 
 	def _process_one(self, ValueNN, state, img, choice, region):

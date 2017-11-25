@@ -136,8 +136,6 @@ def load_ValueNN_data(global_img, ValueNNDataPath, itr):
 
 def fetch_records(records, Img, Data):
 	for index, step, state in records:
-		# print index
-		# print type(index)
 		img_index = Data['img_list'][index]
 		yield img_index, state, Data['question'][index,step:], Data['answer'][index,:], Img[img_index,:,:], Data['target'][index,:]
 

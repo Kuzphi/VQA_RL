@@ -9,7 +9,7 @@ from torch.autograd import Variable
 import pickle
 import argparse
 from tqdm import tqdm
-from torch.nn import Module, Linear, GRUCell, Embedding, Softmax
+from torch.nn import Module, Linear, GRUCell, Embedding, Softmax, DataParallel
 
 
 from os import path
@@ -55,14 +55,14 @@ class Model(Module):
 	def __init__(self, Embed_matrix, **args):
 		super(Model, self).__init__()
 		self.emb_dim    = args['RNN_emb_dim']
-		self.QuesGRU    = nn.GRU(input_size = args['RNN_input_dim'], hidden_size = args['RNN_emb_dim'], num_layers = 1, batch_first = 1).double()
-		self.AnsGRU     = nn.GRU(input_size = args['RNN_input_dim'], hidden_size = args['RNN_emb_dim'], num_layers = 1, batch_first = 1).double()
-		self.Qtrans 	= Linear(args['RNN_output_dim'] , args['trans_dim']).double()
-		self.Atrans 	= Linear(args['RNN_output_dim'] , args['trans_dim']).double()
-		self.Itrans 	= Linear(args['image_dim']      , args['trans_dim']).double()
-		self.QItrans 	= Linear(args['trans_dim']		, args['trans_dim']).double()
-		self.QIAtrans 	= Linear(args['trans_dim']		, args['trans_dim']).double()
-		self.classifier = Linear(args['trans_dim']	    , args['classify_dim']).double()
+		self.QuesGRU    = DataParallel( nn.GRU(input_size = args['RNN_input_dim'], hidden_size = args['RNN_emb_dim'], num_layers = 1, batch_first = 1).double())
+		self.AnsGRU     = DataParallel( nn.GRU(input_size = args['RNN_input_dim'], hidden_size = args['RNN_emb_dim'], num_layers = 1, batch_first = 1).double())
+		self.Qtrans 	= DataParallel( Linear(args['RNN_output_dim'] , args['trans_dim']).double()    )
+		self.Atrans 	= DataParallel( Linear(args['RNN_output_dim'] , args['trans_dim']).double())
+		self.Itrans 	= DataParallel( Linear(args['image_dim']      , args['trans_dim']).double())
+		self.QItrans 	= DataParallel( Linear(args['trans_dim']		, args['trans_dim']).double())
+		self.QIAtrans 	= DataParallel( Linear(args['trans_dim']		, args['trans_dim']).double())
+		self.classifier = DataParallel( Linear(args['trans_dim']	    , args['classify_dim']).double())
 		self.Embed_lookup = Embedding(*Embed_matrix.shape).double()
 		self.Embed_lookup.weight.data.copy_(from_numpy(Embed_matrix).double())
 		self.Embed_lookup.weight.requires_grad = False
@@ -115,11 +115,6 @@ def Train(global_itr, Classifier_itr, Classifier_lr, model_save, **args):
 
 	# Valid(model, test_img, test_data, 8, **args)
 	print("start training");
-	torch.save({
-		'state_dict': model.state_dict(),
-		'optimizer' : optimizer.state_dict(),
-		'parameters': gargs
-		}, model_save + "xxx")
 	best = 0
 	for itr in range(Classifier_itr):
 		print ("Iteration %d :"%(itr))

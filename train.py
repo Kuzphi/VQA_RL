@@ -129,8 +129,8 @@ def Train_Classifier(Classifier, ValueNN, imgs, data, Classifier_bs, Classifier_
 
 def Valid(Classifier, ValueNN, Img, data, Classifier_bs, **kwargs):
 	print ("\tValiding")
-	record = {}
-	for index, img, ques, ans, targets in tqdm(Classifier_batch_generator(Img, data, Classifier_bs, 3)):
+	record, res= {}, {}
+	for index, img, ques, ans, targets in tqdm(Classifier_batch_generator(Img, data, 200, 3)):
 		confidences, _ = Classifier.forward(ValueNN, 
 											Variable(from_numpy(img) , volatile = True).cuda(), 
 											Variable(from_numpy(ques), volatile = True).cuda(), 
@@ -139,8 +139,9 @@ def Valid(Classifier, ValueNN, Img, data, Classifier_bs, **kwargs):
 		confidences = confidences.cpu().data.numpy()
 		for id, confidence, target in zip(index, confidences, targets): 
 			# print id, confidence, target
-			if (not record.has_key(id // 4)) or confidence[0] > record[id // 4][0]:
-				record[id // 4] = [confidence[0], target[0]]
+			if (id // 4 not in record) or confidence[0] > record[id // 4]:
+				record[id // 4] = confidence[0]
+				res[id // 4] = target[0]
 
 	acc = array(record.values())[:,1].sum() / len(record)
 	print ('\tAccuracy of test: %.4f'%(acc))
@@ -154,11 +155,12 @@ def Train(global_itr, **args):
 
 	for itr in range(global_itr):
 		print("Iteration %d"%(itr))
+		Valid(Classifier, ValueNN, test_img, test_data, **args)
 		record = Generate_MoteCarloTree_Root(Classifier, ValueNN, train_img, train_data, itr, **args)
 		Generate_ValueNN_train_data(Classifier, record, train_img, train_data, itr, **args)
 		Train_ValueNN(ValueNN, train_img, itr, **args)
 		Train_Classifier(Classifier, ValueNN, train_img, train_data, **args)
-		Valid(Classifier, ValueNN, test_img, test_data, **args)
+		
 		
 
 

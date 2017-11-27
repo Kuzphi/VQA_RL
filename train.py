@@ -40,16 +40,16 @@ def Arguement():
 	# parser.add_argument('--Classifier_ImgTrans_dim', type=int,  default=4096, help='default: 4096')
 	# parser.add_argument('--Classifier_AnsTrans_dim', type=int,  default=4096, help='default: 4096')
 	# parser.add_argument('--Classifier_QuesTrans_dim', type=int, default=4096, help='default: 4096')
-	parser.add_argument('--Classifier_itr', type=int, default=1,help='Classifier Iteration (default: 18)')
+	parser.add_argument('--Classifier_itr', type=int, default=5,help='Classifier Iteration (default: 18)')
 	
 	parser.add_argument('--ValueNN_RNN2Value_dim', type=int, default=500, help='ValueNN Embedding trans dimension  (default: 500)')
 	parser.add_argument('--ValueNN_Img2Value_dim', type=int, default=500, help='ValueNN Images trans dimension (default: 500)')
 	parser.add_argument('--ValueNN_itr', type=int, default=50, help='ValueNN training maximum Iteration  (default: 10)')
 	parser.add_argument('--ValueNN_lr', type=float, default=1e-5,help='ValueNN Learning Rate (default: 18)')
-	parser.add_argument('--ValueNN_bs', type=int, default=18,help='batch_size for each ValueNN iterations (default: 18)')
+	parser.add_argument('--ValueNN_bs', type=int, default=100,help='batch_size for each ValueNN iterations (default: 18)')
 
 	parser.add_argument('--MC_RollOut_Size', type=int, default=3000, help='default: 4096')
-	parser.add_argument('--MC_Root_size', type=int, default=1,help='default: 1000')
+	parser.add_argument('--MC_Root_size', type=int, default=5000,help='default: 1000')
 
 
 
@@ -67,39 +67,47 @@ def Generate_MoteCarloTree_Root(Classifier, ValueNN, Imgs, Data, itr, MC_Root_si
 	print("\tGenerating MonteCarloTree Root")
 	record = []
 	cnt = 0
-	for index, img, ques, ans, len_a, targets in Classifier_batch_generator(Imgs, Data, 1, 3):		
-		_, states = Classifier.forward(ValueNN, Variable(from_numpy(img)).cuda(), 
-										Variable(from_numpy(ques)).cuda(), Variable(from_numpy(ans)).cuda())
-		id = np.random.randint(0, len(index) - 1)
-		step = np.random.randint(0,25)
-		record.append([index[id], step, states[step][id,:]])
-		cnt += 1
-		if cnt == MC_Root_size: break;
+	lim = 0
+	for index, img, ques, ans, targets in tqdm(Classifier_batch_generator(Imgs, Data, 100, 1)):
+		_, states = Classifier.forward( ValueNN, 
+										Variable(from_numpy(img) , volatile = True).cuda(), 
+										Variable(from_numpy(ques), volatile = True).cuda(),
+										Variable(from_numpy(ans) , volatile = True).cuda())
+		for i in range(len(index)):
+			step = np.random.randint(24,25)
+			record.append([index[i], step, states[step][i, :]])
+		cnt += len(index)
+		if cnt >=lim:
+			print(cnt,"/",MC_Root_size)
+			lim += 1000
+		if cnt >= MC_Root_size: break;
+
 	return record
 
 def Generate_ValueNN_train_data(Classifier, records, Img, Data, Itr, ValueNNDataPath, **kwargs):
 	print ("\tGenerating ValueNN Train Data")
 	Record = []
-	for img_index, state, ques, ans, img, target in fetch_records(records, Img, Data):		
+	for img_index, state, ques, ans, img, target in tqdm(fetch_records(records, Img, Data)):
 		Tree = MonteCarloTree_Module(Classifier, state, ques, ans, img, target)
-		value = Tree.Generate(10000)
+		value = Tree.Generate(100)
 		Record.append([img_index, state.data.cpu().numpy(), value])
-	file = open(path.join(ValueNNDataPath,"ValueNN_Train_" + str(Itr)),'wb+')
+	file = open(path.join(ValueNNDataPath,"ValueNN_Train_" + str(Itr)),'wb')
 	pickle.dump(Record, file)
 
 def Train_ValueNN(ValueNN, img, global_itr, ValueNN_bs, ValueNNDataPath, ValueNN_lr, ValueNN_itr, **kwargs):
 	imgs, states, targets = load_ValueNN_data(img, ValueNNDataPath, global_itr)
 	optimizer = optim.Adam([{"params":ValueNN.parameters()}], lr =ValueNN_lr)
 	print ("\tTraining ValueNN")
-	for itr in range(ValueNN_itr):
+	for itr in tqdm(range(ValueNN_itr)):
 		Losses = []
 		for img, state, target in ValueNN_batch_generator(imgs, states, targets, ValueNN_bs):
 			optimizer.zero_grad()
 			value = ValueNN.forward(Variable(from_numpy(state)).cuda(), Variable(from_numpy(img)).cuda())
-			loss = F.mse_loss(value.cpu(), Variable(from_numpy(target)))
+			loss = F.mse_loss(value.cpu().view(-1), Variable(from_numpy(target)))
 			loss.backward()
 			optimizer.step()
 			Losses.append(loss.data.numpy())
+			# print(loss.data.numpy())
 		if itr % 5 == 0:
 			print ("\t\tValueNN Iteration %d : %.3f"%(itr, np.array(Losses).mean()))
 
@@ -108,7 +116,7 @@ def Train_Classifier(Classifier, ValueNN, imgs, data, Classifier_bs, Classifier_
 	optimizer = optim.Adam(filter(lambda p: p.requires_grad, Classifier.parameters()), lr =Classifier_lr)
 	for itr in range(Classifier_itr):
 		Losses = []
-		for _, img, ques, ans, len_a, target in tqdm(Classifier_batch_generator(imgs, data, Classifier_bs, 1)):
+		for _, img, ques, ans, target in tqdm(Classifier_batch_generator(imgs, data, Classifier_bs, 1)):
 			optimizer.zero_grad()
 			confidence, _ = Classifier.forward(ValueNN, Variable(from_numpy(img).cuda()), 
 				Variable(from_numpy(ques).long()).cuda(), Variable(from_numpy(ans).long()).cuda())
@@ -122,9 +130,12 @@ def Train_Classifier(Classifier, ValueNN, imgs, data, Classifier_bs, Classifier_
 def Valid(Classifier, ValueNN, Img, data, Classifier_bs, **kwargs):
 	print ("\tValiding")
 	record = {}
-	for index, img, ques, ans, len_a, targets in tqdm(Classifier_batch_generator(Img, data, Classifier_bs, 3)):
-		confidences, _ = Classifier.forward(ValueNN, Variable(from_numpy(img)).cuda(), 
-										Variable(from_numpy(ques)).cuda(), Variable(from_numpy(ans)).cuda())
+	for index, img, ques, ans, targets in tqdm(Classifier_batch_generator(Img, data, Classifier_bs, 3)):
+		confidences, _ = Classifier.forward(ValueNN, 
+											Variable(from_numpy(img) , volatile = True).cuda(), 
+											Variable(from_numpy(ques), volatile = True).cuda(), 
+											Variable(from_numpy(ans) , volatile = True).cuda())
+
 		confidences = confidences.cpu().data.numpy()
 		for id, confidence, target in zip(index, confidences, targets): 
 			# print id, confidence, target
@@ -138,8 +149,8 @@ def Train(global_itr, **args):
 	train_img, train_data, test_img, test_data, emb_matrix = Get_Data(**args)
 	num_train = train_data['question'].shape[0]
 
-	ValueNN   = ValueNN_Module(**args).cuda().share_memory()
-	Classifier = Classifier_Module(emb_matrix, **args).cuda().share_memory()
+	ValueNN    = ValueNN_Module(**args).double().cuda()
+	Classifier = Classifier_Module(emb_matrix, **args).cuda()
 
 	for itr in range(global_itr):
 		print("Iteration %d"%(itr))
@@ -154,5 +165,5 @@ def Train(global_itr, **args):
 if __name__ == '__main__':
 	# torch.multiprocessing.set_start_method("spawn")
 	args = Arguement()
-	with torch.cuda.device(1):
-		Train(**args)
+	# with torch.cuda.device():
+	Train(**args)

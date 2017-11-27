@@ -13,9 +13,9 @@ from random import uniform, randint
 class ValueNN_Module(Module):
 	def __init__(self, **args):
 		super(ValueNN_Module, self).__init__()
-		self.RNN2Value  = Linear(args['RNN_emb_dim'], args['ValueNN_RNN2Value_dim']).double()
-		self.Img2Value  = Linear(args['image_dim'], args['ValueNN_Img2Value_dim']).double()
-		self.Regression = Linear(args['ValueNN_RNN2Value_dim'] + args['ValueNN_Img2Value_dim'], 1).double()
+		self.RNN2Value  = Linear(args['RNN_emb_dim'], args['ValueNN_RNN2Value_dim'])
+		self.Img2Value  = Linear(args['image_dim'], args['ValueNN_Img2Value_dim'])
+		self.Regression = Linear(args['ValueNN_RNN2Value_dim'] + args['ValueNN_Img2Value_dim'], 1)
 	def forward(self, rnn_emb, Img):
 		RValue = self.RNN2Value(rnn_emb)
 		IValue = self.Img2Value(Img)
@@ -24,17 +24,17 @@ class ValueNN_Module(Module):
 class Classifier_Module(Module):
 	def __init__(self, Embed_matrix, **args):
 		super(Classifier_Module, self).__init__()
-		self.WordTrans    = DataParallel( Linear(args['word_dim'],  args['Classifier_Trans_dim']).double()  )
-		self.ImgTrans     = DataParallel( Linear(args['image_dim'], args['Classifier_Trans_dim']).double()  )
-		self.AnsTrans     = DataParallel( Linear(args['word_dim'],  args['RNN_output_dim']).double()        )
-		self.Classify     = DataParallel( Linear(args['RNN_output_dim'], args['classify_dim']).double()     )
+		self.WordTrans    = DataParallel( Linear(args['word_dim']      , args['Classifier_Trans_dim']).double()  )
+		self.ImgTrans     = DataParallel( Linear(args['image_dim']     , args['Classifier_Trans_dim']).double()  )
+		self.AnsTrans     = DataParallel( Linear(args['word_dim']      , args['RNN_output_dim']).double()        )
+		self.Classify     = DataParallel( Linear(args['RNN_output_dim'], args['classify_dim']).double()          )
 		self.img_dim      = args['image_dim']
 		self.input_dim    = args['RNN_input_dim']
 		self.emb_dim      = args['RNN_emb_dim']
 		self.Embed_lookup = Embedding(*Embed_matrix.shape).double()
 		self.Embed_lookup.weight.data.copy_(from_numpy(Embed_matrix).double())
 		self.Embed_lookup.weight.requires_grad = False
-		self.Cell = DataParallel( GRUCell(input_size = args['Classifier_Trans_dim'], hidden_size = args['RNN_emb_dim']).double() )
+		self.Cell = GRUCell(input_size = args['Classifier_Trans_dim'], hidden_size = args['RNN_emb_dim']).double()
 
 
 	def _process_one(self, ValueNN, state, img, choice, region):
@@ -103,8 +103,8 @@ class Node():
 class MonteCarloTree_Module():
 	def __init__(self, Classifier, state, Ques, Ans, Img, Target):
 		self.root  		= Node(state.view(1,-1))
-		self.Ans   		= Classifier.Embed_lookup(Variable(from_numpy(Ans.reshape(1,-1) ).long()).cuda()).mean(dim = 1)
-		self.words 		= Classifier.Embed_lookup(Variable(from_numpy(Ques).long()).cuda())
+		self.Ans   		= Classifier.Embed_lookup(Variable(from_numpy(Ans.reshape(1,-1)), volatile = True).cuda()).mean(dim = 1)
+		self.words 		= Classifier.Embed_lookup(Variable(from_numpy(Ques), volatile = True).cuda())
 		self.Img    	= Img 
 		self.Target 	= Target
 		self.Classifier = Classifier
@@ -117,7 +117,7 @@ class MonteCarloTree_Module():
 			next = randint(0, 48) if uniform(0,1) < epsilon else p.Score().argmax()
 			if p.son[next] == None:
 				# print p.state.shape, self.Img[:,next,:].shape
-				this_img    = Variable(from_numpy(self.Img[next,:].reshape(1,-1))).cuda()
+				this_img    = Variable(from_numpy(self.Img[next,:].reshape(1,-1)), volatile = True).cuda()
 				next_state  = self.Classifier.OneStep(word.view(1,-1), this_img, p.state)
 				p.son[next] = Node(next_state)
 			p = p.son[next]
@@ -133,7 +133,6 @@ class MonteCarloTree_Module():
 			p = p.son[node]
 
 	def Generate(self, Roll_Out_size):
-		print("\t\tGenerating Sample")
 		for num in range(Roll_Out_size):
 			self.Sample(0.2)
 		x = self.root.win / self.root.cnt.sum()

@@ -27,7 +27,7 @@ def Load_data(img_h5, ques_h5, data_type, testing = 0):
 	else:
 		with h5py.File(img_h5,'r') as hf:
 			tem = hf.get('images' + data_type)
-			img_feature = np.array(tem,dtype = np.float64).reshape(-1, 49, 2048)			
+			img_feature = np.array(tem,dtype = np.float64).reshape(-1, 49, 2048)
 			print(img_feature.shape)
 
 	print('loading ' + data_type[1:] + ' h5 file...')
@@ -89,7 +89,7 @@ def Classifier_batch_generator(Imgs, data, batch_size, neg_size, total = 9999999
 	sz = data['question'].shape[0]
 	index = np.arange(sz / 4) * 4
 	np.random.shuffle(index)
-	i, lim = 0, 0
+	i, lim = 0, 10000
 	while i < index.shape[0]:
 		pos = index[i:i + batch_size]
 		i += batch_size

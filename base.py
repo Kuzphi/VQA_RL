@@ -55,14 +55,16 @@ class Model(Module):
 	def __init__(self, Embed_matrix, **args):
 		super(Model, self).__init__()
 		self.emb_dim    = args['RNN_emb_dim']
-		self.QuesGRU    = DataParallel( nn.GRU(input_size = args['RNN_input_dim'], hidden_size = args['RNN_emb_dim'], num_layers = 1, batch_first = 1).double())
-		self.AnsGRU     = DataParallel( nn.GRU(input_size = args['RNN_input_dim'], hidden_size = args['RNN_emb_dim'], num_layers = 1, batch_first = 1).double())
-		self.Qtrans 	= DataParallel( Linear(args['RNN_output_dim'] , args['trans_dim']).double()    )
-		self.Atrans 	= DataParallel( Linear(args['RNN_output_dim'] , args['trans_dim']).double())
-		self.Itrans 	= DataParallel( Linear(args['image_dim']      , args['trans_dim']).double())
-		self.QItrans 	= DataParallel( Linear(args['trans_dim']		, args['trans_dim']).double())
-		self.QIAtrans 	= DataParallel( Linear(args['trans_dim']		, args['trans_dim']).double())
-		self.classifier = DataParallel( Linear(args['trans_dim']	    , args['classify_dim']).double())
+		self.QuesGRU    = nn.GRU(input_size = args['RNN_input_dim'], hidden_size = args['RNN_emb_dim'], num_layers = 1, batch_first = 1).double()
+		self.AnsGRU     = nn.GRU(input_size = args['RNN_input_dim'], hidden_size = args['RNN_emb_dim'], num_layers = 1, batch_first = 1).double()
+		self.QuesGRU.flatten_parameters()
+		self.AnsGRU .flatten_parameters()
+		self.Qtrans 	= Linear(args['RNN_output_dim'] , args['trans_dim']).double()    
+		self.Atrans 	= Linear(args['RNN_output_dim'] , args['trans_dim']).double()
+		self.Itrans 	= Linear(args['image_dim']      , args['trans_dim']).double()
+		self.QItrans 	= Linear(args['trans_dim']		, args['trans_dim']).double()
+		self.QIAtrans 	= Linear(args['trans_dim']		, args['trans_dim']).double()
+		self.classifier = Linear(args['trans_dim']	    , args['classify_dim']).double()
 		self.Embed_lookup = Embedding(*Embed_matrix.shape).double()
 		self.Embed_lookup.weight.data.copy_(from_numpy(Embed_matrix).double())
 		self.Embed_lookup.weight.requires_grad = False
@@ -70,7 +72,6 @@ class Model(Module):
 	def forward(self, Img, Ques, Ans):
 		_Ans  = self.Embed_lookup(Ans)
 		_Ques = self.Embed_lookup(Ques)
-
 		bs = Img.shape[0]
 		Qh0 = Variable(torch.randn(1, bs, self.emb_dim)).cuda().double()
 		Q, Qh = self.QuesGRU(_Ques, Qh0)
@@ -109,19 +110,17 @@ def Valid(Model, Img, data, bs, **kwargs):
 
 def Train(global_itr, Classifier_itr, Classifier_lr, model_save, **args):
 	train_img, train_data, test_img, test_data, emb_matrix = Get_Data(**args)
-	print("AAAAA")
 	num_train = train_data['question'].shape[0]
-	model   = Model(Embed_matrix = emb_matrix, **args).cuda()
+	model   = DataParallel( Model(Embed_matrix = emb_matrix, **args).cuda() )
 	print("construct model")
 	optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr = Classifier_lr)
 	print("construct optimizer")
-	# Valid(model, test_img, test_data, 8, **args)
 	print("start training");
 	best = 0
 	for itr in range(Classifier_itr):
 		print ("Iteration %d :"%(itr))
 		Losses = []
-		for _, img, ques, ans, target in tqdm(Classifier_batch_generator(train_img, train_data, 18, 1)):
+		for _, img, ques, ans, target in tqdm(Classifier_batch_generator(train_img, train_data, 36, 1)):
 			optimizer.zero_grad()
 			confi = model.forward(	Variable(from_numpy(img)).cuda(),
 									Variable(from_numpy(ques).long()).cuda(),

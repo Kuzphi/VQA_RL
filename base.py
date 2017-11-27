@@ -35,7 +35,7 @@ def Arguement():
 	parser.add_argument('--Classifier_lr', type=float, default=1e-5,help='Classifier Learning Rate (default: 1e-5)')
 	parser.add_argument('--Classifier_itr', type=int, default=100,help='Classifier Iteration (default: 18)')
 
-	parser.add_argument('--RNN_input_dim',  type=int,   default=300,  help='RNN_input_size (default: 300)')
+	parser.add_argument('--RNN_input_dim',  type=int,   default=300 + 2048,  help='RNN_input_size (default: 300)')
 	parser.add_argument('--RNN_output_dim',  type=int,   default=512,  help='RNN_input_size (default: 300)')
 	parser.add_argument('--RNN_emb_dim', type=int,   default=512,  help='RNN_hidden_size (default: 512)')	
 	parser.add_argument('--trans_dim', type=int, default=500, help='ValueNN Embedding trans dimension  (default: 500)')
@@ -70,8 +70,12 @@ class Model(Module):
 		self.Embed_lookup.weight.requires_grad = False
 
 	def forward(self, Img, Ques, Ans):
-		_Ans  = self.Embed_lookup(Ans)
-		_Ques = self.Embed_lookup(Ques)
+		_Ans   = self.Embed_lookup(Ans)
+		_Ques  = self.Embed_lookup(Ques)
+		aImg   = Img.unsqueeze(dim = 1).repeat(1, Ans.shape[1] , 1)
+		qImg   = Img.unsqueeze(dim = 1).repeat(1, Ques.shape[1], 1)
+		_Ans   = torch.cat([_Ans , aImg], dim = 2)
+		_Ques  = torch.cat([_Ques, qImg], dim = 2)
 		bs = Img.shape[0]
 		Qh0 = Variable(torch.randn(1, bs, self.emb_dim)).cuda().double()
 		Q, Qh = self.QuesGRU(_Ques, Qh0)
@@ -81,7 +85,7 @@ class Model(Module):
 		A, Ah = self.AnsGRU(_Ans, Ah0)
 		A = self.Atrans(A[:, -1, :])
 
-		I = self.Itrans(Img.mean(dim = 1))
+		I = self.Itrans(Img)
 		QI = self.QItrans(Q * I)
 
 		QIA = self.QIAtrans(QI * A)
@@ -122,7 +126,7 @@ def Train(global_itr, Classifier_itr, Classifier_lr, model_save, **args):
 		Losses = []
 		for _, img, ques, ans, target in tqdm(Classifier_batch_generator(train_img, train_data, 36, 1)):
 			optimizer.zero_grad()
-			confi = model.forward(	Variable(from_numpy(img)).cuda(),
+			confi = model.forward(	Variable(from_numpy(img).mean(dim = 1)).cuda(),
 									Variable(from_numpy(ques).long()).cuda(),
 									Variable(from_numpy(ans).long()).cuda()).cpu()
 			loss = F.binary_cross_entropy(confi, Variable(from_numpy(target)).double())

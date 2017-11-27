@@ -31,7 +31,7 @@ def Arguement():
 	
 	# parser.add_argument('--decay_factor',    type=float, default=0.99997592083, help='decay factor of learning rate')
 	
-	parser.add_argument('--RNN_input_dim',  type=int,   default=300,  help='RNN_input_size (default: 300)')
+	parser.add_argument('--RNN_input_dim',  type=int,   default=300 + 2048,  help='RNN_input_size (default: 300)')
 	parser.add_argument('--RNN_output_dim',  type=int,   default=512,  help='RNN_input_size (default: 300)')
 	parser.add_argument('--RNN_emb_dim', type=int,   default=512,  help='RNN_hidden_size (default: 512)')	
 	parser.add_argument('--Classifier_lr', type=float, default=1e-5,help='Classifier Learning Rate (default: 1e-5)')

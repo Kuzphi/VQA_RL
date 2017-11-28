@@ -100,8 +100,6 @@ def Classifier_batch_generator(Imgs, data, batch_size, neg_size, total = 9999999
 		neg = list(itertools.chain(*neg))
 		batch_index = array(list(pos) + list(neg),dtype = np.int32)
 		np.random.shuffle(batch_index)
-		print(batch_index.max())
-		print(data['question'].shape)
 		question = data['question'][batch_index,:]
 		length_q = data['length_q'][batch_index]
 		answer   = data['answer'][batch_index]

@@ -129,7 +129,7 @@ def Train_Classifier(Classifier, ValueNN, imgs, data, Classifier_bs, Classifier_
 
 def Valid(Classifier, ValueNN, Img, data, Classifier_bs, **kwargs):
 	print ("\tValiding")
-	record = {}
+	res,record = {},{}
 	for index, img, ques, ans, targets in tqdm(Classifier_batch_generator(Img, data, 200 , 3)):
 		confidences, _ = Classifier.forward(ValueNN, 
 											Variable(from_numpy(img) , volatile = True).cuda(), 

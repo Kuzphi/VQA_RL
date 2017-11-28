@@ -87,7 +87,7 @@ def Get_Data(ques_h5, train_img_h5, test_img_h5, **kwargs):
 
 def Classifier_batch_generator(Imgs, data, batch_size, neg_size, total = 9999999):
 	sz = data['question'].shape[0]
-	index = np.arange(sz / 4) * 4
+	index = np.arange(sz / 4) * 4 
 	np.random.shuffle(index)
 	i, lim = 0, 10000
 	while i < index.shape[0]:
@@ -98,18 +98,18 @@ def Classifier_batch_generator(Imgs, data, batch_size, neg_size, total = 9999999
 			lim += 10000 
 		neg = [np.random.choice([id+1, id+2, id+3], neg_size, replace = False) for id in pos]
 		neg = list(itertools.chain(*neg))
-		np.random.shuffle(neg)
 		batch_index = array(list(pos) + list(neg),dtype = np.int32)
 		np.random.shuffle(batch_index)
-
+		print(batch_index.max())
+		print(data['question'].shape)
 		question = data['question'][batch_index,:]
 		length_q = data['length_q'][batch_index]
 		answer   = data['answer'][batch_index]
 		img_list = data['img_list'][batch_index]
 		target   = data['target'][batch_index]
 
-		ques_pos = data['ques_pos'][batch_index,:]
-		ans_pos = data['ans_pos'][batch_index,:]
+		# ques_pos = data['ques_pos'][batch_index,:]
+		# ans_pos = data['ans_pos'][batch_index,:]
 
 		target = np.array(target);
 		img = Imgs[img_list,:]

@@ -31,7 +31,7 @@ def Arguement():
 	
 	# parser.add_argument('--decay_factor',    type=float, default=0.99997592083, help='decay factor of learning rate')
 	
-	parser.add_argument('--RNN_input_dim',  type=int,   default=300 + 2048,  help='RNN_input_size (default: 300)')
+	parser.add_argument('--RNN_input_dim',  type=int,   default=300,  help='RNN_input_size (default: 300)')
 	parser.add_argument('--RNN_output_dim',  type=int,   default=512,  help='RNN_input_size (default: 300)')
 	parser.add_argument('--RNN_emb_dim', type=int,   default=512,  help='RNN_hidden_size (default: 512)')	
 	parser.add_argument('--Classifier_lr', type=float, default=1e-5,help='Classifier Learning Rate (default: 1e-5)')
@@ -129,8 +129,8 @@ def Train_Classifier(Classifier, ValueNN, imgs, data, Classifier_bs, Classifier_
 
 def Valid(Classifier, ValueNN, Img, data, Classifier_bs, **kwargs):
 	print ("\tValiding")
-	record, res= {}, {}
-	for index, img, ques, ans, targets in tqdm(Classifier_batch_generator(Img, data, 200, 3)):
+	record = {}
+	for index, img, ques, ans, targets in tqdm(Classifier_batch_generator(Img, data, 200 , 3)):
 		confidences, _ = Classifier.forward(ValueNN, 
 											Variable(from_numpy(img) , volatile = True).cuda(), 
 											Variable(from_numpy(ques), volatile = True).cuda(), 
@@ -143,7 +143,7 @@ def Valid(Classifier, ValueNN, Img, data, Classifier_bs, **kwargs):
 				record[id // 4] = confidence[0]
 				res[id // 4] = target[0]
 
-	acc = array(record.values())[:,1].sum() / len(record)
+	acc = sum(res.values()) / len(record)
 	print ('\tAccuracy of test: %.4f'%(acc))
 
 def Train(global_itr, **args):

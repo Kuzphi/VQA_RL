@@ -33,7 +33,7 @@ def Arguement():
 	
 	# parser.add_argument('--decay_factor',    type=float, default=0.99997592083, help='decay factor of learning rate')
 	parser.add_argument('--Classifier_lr', type=float, default=1e-5,help='Classifier Learning Rate (default: 1e-5)')
-	parser.add_argument('--Classifier_itr', type=int, default=100,help='Classifier Iteration (default: 18)')
+	parser.add_argument('--Classifier_itr', type=int, default=200,help='Classifier Iteration (default: 18)')
 
 	parser.add_argument('--RNN_input_dim',  type=int,   default=300 + 2048,  help='RNN_input_size (default: 300)')
 	parser.add_argument('--RNN_output_dim',  type=int,   default=512,  help='RNN_input_size (default: 300)')
@@ -96,10 +96,9 @@ def Valid(Model, Img, data, bs, **kwargs):
 	print ("\tValiding")
 	record, res= {}, {}
 	for index, img, ques, ans, targets in tqdm(Classifier_batch_generator(Img, data, bs, 3)):
-		confidences = Model.forward(	Variable(from_numpy(img), volatile = True).cuda(),
-								Variable(from_numpy(ques).long(), volatile = True).cuda(),
-								Variable(from_numpy(ans).long() , volatile = True).cuda() 
-							).cpu()
+		confidences = Model.forward(Variable(from_numpy(img).mean(dim = 1), volatile = True).cuda(),
+									Variable(from_numpy(ques).long(), volatile = True).cuda(),
+									Variable(from_numpy(ans).long() , volatile = True).cuda()).cpu()
 		for id, confidence, target in zip(index, confidences, targets):
 			# print id, confidence, target
 			# print (id // 4, id, confidence[0], target[0])
@@ -123,17 +122,22 @@ def Train(global_itr, Classifier_itr, Classifier_lr, model_save, **args):
 	best = 0
 	for itr in range(Classifier_itr):
 		print ("Iteration %d :"%(itr))
-		Losses = []
-		for _, img, ques, ans, target in tqdm(Classifier_batch_generator(train_img, train_data, 36, 1)):
+		Losses = 0
+		for _, img, ques, ans, target in tqdm(Classifier_batch_generator(train_img, train_data, 18, 1)):
 			optimizer.zero_grad()
+			print("start training")
 			confi = model.forward(	Variable(from_numpy(img).mean(dim = 1)).cuda(),
 									Variable(from_numpy(ques).long()).cuda(),
 									Variable(from_numpy(ans).long()).cuda()).cpu()
+			print("finish forwarding")
 			loss = F.binary_cross_entropy(confi, Variable(from_numpy(target)).double())
 			loss.backward()
+			print("start backward")
 			optimizer.step()
-			Losses.append(loss.data.numpy())
-		print("\tTraining Loss : %.3f"%(np.array(Losses).mean()))
+			print("finish backward")
+			Losses += loss.data.numpy()
+			
+		print("\tTraining Loss : %.3f"%(Losses  / train_img.sha))
 		if itr and itr % 5 == 0:
 			acc = Valid(model, test_img, test_data, 8, **args)
 			print ('\tAccuracy of test: %.4f'%(acc))

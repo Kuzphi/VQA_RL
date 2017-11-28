@@ -35,7 +35,7 @@ def Arguement():
 	parser.add_argument('--Classifier_lr', type=float, default=1e-5,help='Classifier Learning Rate (default: 1e-5)')
 	parser.add_argument('--Classifier_itr', type=int, default=200,help='Classifier Iteration (default: 18)')
 
-	parser.add_argument('--RNN_input_dim',  type=int,   default=300 + 2048,  help='RNN_input_size (default: 300)')
+	parser.add_argument('--RNN_input_dim',  type=int,   default=300,  help='RNN_input_size (default: 300)')
 	parser.add_argument('--RNN_output_dim',  type=int,   default=512,  help='RNN_input_size (default: 300)')
 	parser.add_argument('--RNN_emb_dim', type=int,   default=512,  help='RNN_hidden_size (default: 512)')	
 	parser.add_argument('--trans_dim', type=int, default=500, help='ValueNN Embedding trans dimension  (default: 500)')
@@ -55,11 +55,9 @@ class Model(Module):
 	def __init__(self, Embed_matrix, **args):
 		super(Model, self).__init__()
 		self.emb_dim    = args['RNN_emb_dim']
-		self.QuesGRU    = nn.GRU(input_size = args['RNN_input_dim'], hidden_size = args['RNN_emb_dim'], num_layers = 1, batch_first = 1).double()
+		self.QuesGRU    = nn.GRU(input_size = args['RNN_input_dim'] + args['image_dim'], hidden_size = args['RNN_emb_dim'], num_layers = 1, batch_first = 1).double()
 		self.AnsGRU     = nn.GRU(input_size = args['RNN_input_dim'], hidden_size = args['RNN_emb_dim'], num_layers = 1, batch_first = 1).double()
-		self.QuesGRU.flatten_parameters()
-		self.AnsGRU .flatten_parameters()
-		self.Qtrans 	= Linear(args['RNN_output_dim'] , args['trans_dim']).double()    
+		self.Qtrans 	= Linear(args['RNN_output_dim'] , args['trans_dim']).double()
 		self.Atrans 	= Linear(args['RNN_output_dim'] , args['trans_dim']).double()
 		self.Itrans 	= Linear(args['image_dim']      , args['trans_dim']).double()
 		self.QItrans 	= Linear(args['trans_dim']		, args['trans_dim']).double()
@@ -72,10 +70,9 @@ class Model(Module):
 	def forward(self, Img, Ques, Ans):
 		_Ans   = self.Embed_lookup(Ans)
 		_Ques  = self.Embed_lookup(Ques)
-		aImg   = Img.unsqueeze(dim = 1).repeat(1, Ans.shape[1] , 1)
 		qImg   = Img.unsqueeze(dim = 1).repeat(1, Ques.shape[1], 1)
-		_Ans   = torch.cat([_Ans , aImg], dim = 2)
 		_Ques  = torch.cat([_Ques, qImg], dim = 2)
+
 		bs = Img.shape[0]
 		Qh0 = Variable(torch.randn(1, bs, self.emb_dim)).cuda().double()
 		Q, Qh = self.QuesGRU(_Ques, Qh0)
@@ -125,16 +122,16 @@ def Train(global_itr, Classifier_itr, Classifier_lr, model_save, **args):
 		Losses = 0
 		for _, img, ques, ans, target in tqdm(Classifier_batch_generator(train_img, train_data, 18, 1)):
 			optimizer.zero_grad()
-			print("start training")
+			# print("start training")
 			confi = model.forward(	Variable(from_numpy(img).mean(dim = 1)).cuda(),
 									Variable(from_numpy(ques).long()).cuda(),
 									Variable(from_numpy(ans).long()).cuda()).cpu()
-			print("finish forwarding")
+			# print("finish forwarding")
 			loss = F.binary_cross_entropy(confi, Variable(from_numpy(target)).double())
 			loss.backward()
-			print("start backward")
+			# print("start backward")
 			optimizer.step()
-			print("finish backward")
+			# print("finish backward")
 			Losses += loss.data.numpy()
 			
 		print("\tTraining Loss : %.3f"%(Losses  / train_img.sha))

@@ -128,13 +128,14 @@ def Train(global_itr, Classifier_itr, Classifier_lr, model_save, **args):
 									Variable(from_numpy(ans).long()).cuda()).cpu()
 			# print("finish forwarding")
 			loss = F.binary_cross_entropy(confi, Variable(from_numpy(target)).double())
+			print (loss)
 			loss.backward()
 			# print("start backward")
 			optimizer.step()
 			# print("finish backward")
 			Losses += loss.data.numpy()
 			
-		print("\tTraining Loss : %.3f"%(Losses  / train_img.sha))
+		print("\tTraining Loss : %.3f"%(Losses  / train_img.shape[0]))
 		if itr and itr % 5 == 0:
 			acc = Valid(model, test_img, test_data, 8, **args)
 			print ('\tAccuracy of test: %.4f'%(acc))

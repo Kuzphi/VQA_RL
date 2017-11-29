@@ -120,22 +120,20 @@ def Train(global_itr, Classifier_itr, Classifier_lr, model_save, **args):
 	for itr in range(Classifier_itr):
 		print ("Iteration %d :"%(itr))
 		Losses = 0
+		cnt = 0
 		for _, img, ques, ans, target in tqdm(Classifier_batch_generator(train_img, train_data, 18, 1)):
 			optimizer.zero_grad()
 			# print("start training")
 			confi = model.forward(	Variable(from_numpy(img).mean(dim = 1)).cuda(),
 									Variable(from_numpy(ques).long()).cuda(),
 									Variable(from_numpy(ans).long()).cuda()).cpu()
-			# print("finish forwarding")
 			loss = F.binary_cross_entropy(confi, Variable(from_numpy(target)).double())
-			print (loss)
 			loss.backward()
-			# print("start backward")
 			optimizer.step()
-			# print("finish backward")
 			Losses += loss.data.numpy()
+			cnt += 1
 			
-		print("\tTraining Loss : %.3f"%(Losses  / train_img.shape[0]))
+		print("\tTraining Loss : %.3f"%(Losses / cnt))
 		if itr and itr % 5 == 0:
 			acc = Valid(model, test_img, test_data, 8, **args)
 			print ('\tAccuracy of test: %.4f'%(acc))

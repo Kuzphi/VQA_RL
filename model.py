@@ -34,7 +34,7 @@ class Classifier_Module(Module):
 		self.Embed_lookup = Embedding(*Embed_matrix.shape).double()
 		self.Embed_lookup.weight.data.copy_(from_numpy(Embed_matrix).double())
 		self.Embed_lookup.weight.requires_grad = False
-		self.Cell = GRUCell(input_size = args['Classifier_Trans_dim'], hidden_size = args['RNN_emb_dim']).double()
+		self.Cell = GRUCell(input_size = args['RNN_input_dim'], hidden_size = args['RNN_emb_dim']).double()
 
 
 	def _process_one(self, ValueNN, state, img, choice, region):
@@ -76,9 +76,10 @@ class Classifier_Module(Module):
 		return self.Inference(ans, hidden_state), hidden_state
 
 	def OneStep(self, ques, img, hidden):
-		img_  = self.ImgTrans(img)
-		word_ = self.WordTrans(ques)
-		QI = torch.mul(word_ , img_)
+		# img_  = self.ImgTrans(img)
+		# word_ = self.WordTrans(ques)
+		# QI = torch.mul(word_ , img_)
+		QI = torch.cat([ques, img], dim = 1)
 		return self.Cell(QI, hidden)
 
 	def Inference(self, Ans, hidden_state):

@@ -155,15 +155,11 @@ def Train(global_itr, **args):
 
 	for itr in range(global_itr):
 		print("Iteration %d"%(itr))
-		Valid(Classifier, ValueNN, test_img, test_data, **args)
 		record = Generate_MoteCarloTree_Root(Classifier, ValueNN, train_img, train_data, itr, **args)
 		Generate_ValueNN_train_data(Classifier, record, train_img, train_data, itr, **args)
 		Train_ValueNN(ValueNN, train_img, itr, **args)
 		Train_Classifier(Classifier, ValueNN, train_img, train_data, **args)
-		
-		
-
-
+		Valid(Classifier, ValueNN, test_img, test_data, **args)
 if __name__ == '__main__':
 	# torch.multiprocessing.set_start_method("spawn")
 	args = Arguement()

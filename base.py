@@ -74,7 +74,7 @@ class Model(Module):
 		qImg   = Img.unsqueeze(dim = 1).repeat(1, Ques.data.shape[1], 1)
 		_Ques  = torch.cat([_Ques, qImg], dim = 2)
 
-		bs = Img.shape[0]
+		bs = Img.data.shape[0]
 		Qh0 = Variable(torch.randn(1, bs, self.emb_dim)).cuda().double()
 		Q, Qh = self.QuesGRU(_Ques, Qh0)
 		Q = self.Qtrans(Q[:, -1, :])

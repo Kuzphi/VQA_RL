@@ -66,11 +66,12 @@ class Model(Module):
 		self.Embed_lookup = Embedding(*Embed_matrix.shape).double()
 		self.Embed_lookup.weight.data.copy_(from_numpy(Embed_matrix).double())
 		self.Embed_lookup.weight.requires_grad = False
+		print("Finishing Init")
 
 	def forward(self, Img, Ques, Ans):
 		_Ans   = self.Embed_lookup(Ans)
 		_Ques  = self.Embed_lookup(Ques)
-		qImg   = Img.unsqueeze(dim = 1).repeat(1, Ques.shape[1], 1)
+		qImg   = Img.unsqueeze(dim = 1).repeat(1, Ques.data.shape[1], 1)
 		_Ques  = torch.cat([_Ques, qImg], dim = 2)
 
 		bs = Img.shape[0]
@@ -111,10 +112,10 @@ def Valid(Model, Img, data, bs, **kwargs):
 def Train(global_itr, Classifier_itr, Classifier_lr, model_save, **args):
 	train_img, train_data, test_img, test_data, emb_matrix = Get_Data(**args)
 	num_train = train_data['question'].shape[0]
-	model   = DataParallel( Model(Embed_matrix = emb_matrix, **args).cuda() )
 	print("construct model")
-	optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr = Classifier_lr)
+	model   = DataParallel( Model(Embed_matrix = emb_matrix, **args).cuda() )
 	print("construct optimizer")
+	optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr = Classifier_lr)
 	print("start training");
 	best = 0
 	for itr in range(Classifier_itr):
@@ -143,7 +144,7 @@ def Train(global_itr, Classifier_itr, Classifier_lr, model_save, **args):
 					'state_dict': model.state_dict(),
 					'optimizer' : optimizer.state_dict(),
 					'parameters': gargs
-					}, model_save + str(best))
+					}, model_save +"base_" + str(best))
 
 if __name__ == '__main__':
 	# torch.multiprocessing.set_start_method("spawn")

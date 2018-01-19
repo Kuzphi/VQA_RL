@@ -154,6 +154,7 @@ def Train(global_itr, model_save, **args):
 
 	ValueNN    = ValueNN_Module(**args).double().cuda()
 	Classifier = Classifier_Module(emb_matrix, **args).cuda()
+	Classifier.load_state_dict('../model/best')
 	best = 0
 	for itr in range(global_itr):
 		print("Iteration %d"%(itr))
